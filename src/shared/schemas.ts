@@ -171,6 +171,8 @@ export const importInput = z.object({
   branch_id: id,
   session_id: id,
   rows: z.array(importRowInput).min(1).max(IMPORT_CHUNK),
+  /** Highest numeric admission number anywhere in the file, so automatic numbers start after it. */
+  auto_after: z.number().int().min(0).max(1_000_000_000).default(0),
 });
 
 export const PROMOTION_OUTCOMES = ['pass', 'fail', 'left'] as const;

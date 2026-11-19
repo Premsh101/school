@@ -202,7 +202,7 @@ importRoutes.post('/students/import', requirePermission('students.import'), asyn
   }
 
   // Rows without an admission number get the next free numbers.
-  let next = (maxNo!.results[0] as { n: number }).n;
+  let next = Math.max((maxNo!.results[0] as { n: number }).n, input.auto_after);
   for (const row of ready) {
     if (/^\d+$/.test(row.admission_no)) next = Math.max(next, Number(row.admission_no));
   }

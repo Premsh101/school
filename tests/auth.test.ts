@@ -283,6 +283,36 @@ describe('roles and branch scope', () => {
     ).toBe(200);
   });
 
+  it('signs an admin out of other devices when they reset their own password in Logins', async () => {
+    const other = await signIn(OWNER.username, OWNER.password);
+    const me = (await owner.get('/bootstrap')).data.user;
+    const res = await owner.put(`/users/${me.id}`, {
+      username: 'owner',
+      name: 'Owner',
+      role: 'admin',
+      branch_ids: [],
+      password: OWNER.password,
+    });
+    expect(res.status).toBe(200);
+    expect((await other.get('/home')).status).toBe(401);
+    expect((await owner.get('/home')).status).toBe(200);
+  });
+
+  it('gives dashboard counts only to roles that may see the lists', async () => {
+    await owner.post('/users', {
+      username: 'helper1',
+      name: 'Helper',
+      role: 'staff',
+      branch_ids: [1],
+      password: 'helper-pass-1',
+    });
+    const helper = await signIn('helper1', 'helper-pass-1');
+    expect((await helper.get('/home')).data).toEqual({ students: [], staff: [] });
+    const acct = (await accountant.get('/home')).data;
+    expect(acct.staff).toEqual([]);
+    expect((await principal.get('/home')).data.students).toEqual([{ branch_id: 1, count: 1 }]);
+  });
+
   it('records changes in the audit log', async () => {
     const log = (await owner.get('/audit')).data;
     expect(log.total).toBeGreaterThan(5);

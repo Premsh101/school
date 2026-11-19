@@ -148,7 +148,14 @@ userRoutes.put('/users/:id', async (c) => {
     );
   }
   // A new password, or switching the login off, signs that person out everywhere.
-  if ((input.password && id !== actor.id) || !input.active) {
+  // An admin changing their own password here stays signed in on this device only.
+  if (input.password && id === actor.id) {
+    statements.push(
+      db
+        .prepare('DELETE FROM auth_sessions WHERE user_id = ? AND id <> ?')
+        .bind(id, actor.session_id),
+    );
+  } else if (input.password || !input.active) {
     statements.push(db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(id));
   }
   try {

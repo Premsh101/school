@@ -68,25 +68,26 @@ export function ImportPage() {
     setImported(null);
   };
 
-  async function send(commit: boolean): Promise<{ errors: ImportRowError[]; imported: number }> {
-    const all: ImportRowError[] = [];
-    let count = 0;
-    for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
-      setBusy(
-        t('{done} of {total} rows…', {
-          done: Math.min(i + IMPORT_CHUNK, rows.length),
-          total: rows.length,
-        }),
-      );
-      const res = await api.post<ImportResult>(`/students/import${commit ? '?commit=1' : ''}`, {
-        branch_id: Number(branchId),
-        session_id: boot.session?.id,
-        rows: rows.slice(i, i + IMPORT_CHUNK),
-      });
-      all.push(...res.errors);
-      count += res.imported;
-    }
-    return { errors: all, imported: count };
+  // Automatic admission numbers must start after the highest number anywhere in the file,
+  // not only in the chunk being sent.
+  const autoAfter = rows.reduce(
+    (max, r) => (/^\d{1,9}$/.test(r.admission_no) ? Math.max(max, Number(r.admission_no)) : max),
+    0,
+  );
+
+  async function sendChunk(start: number, commit: boolean): Promise<ImportResult> {
+    setBusy(
+      t('{done} of {total} rows…', {
+        done: Math.min(start + IMPORT_CHUNK, rows.length),
+        total: rows.length,
+      }),
+    );
+    return api.post<ImportResult>(`/students/import${commit ? '?commit=1' : ''}`, {
+      branch_id: Number(branchId),
+      session_id: boot.session?.id,
+      rows: rows.slice(start, start + IMPORT_CHUNK),
+      auto_after: autoAfter,
+    });
   }
 
   async function onFile(file: File | undefined) {
@@ -123,21 +124,36 @@ export function ImportPage() {
   async function run(commit: boolean) {
     setFailure(null);
     setErrors(null);
+    setImported(null);
+    let saved = 0;
     try {
-      const cross = crossFileErrors(rows);
       // Always check the whole file first, so nothing is saved if any row is wrong.
-      const check = await send(false);
-      const found = [...cross, ...check.errors].sort((a, b) => a.line - b.line);
+      const found = crossFileErrors(rows);
+      for (let i = 0; i < rows.length; i += IMPORT_CHUNK)
+        found.push(...(await sendChunk(i, false)).errors);
+      found.sort((x, y) => x.line - y.line);
       setErrors(found);
-      if (commit && found.length === 0) {
-        const res = await send(true);
-        setImported(res.imported);
-        setRows([]);
-        await client.invalidateQueries();
+      if (!commit || found.length > 0) return;
+
+      for (let i = 0; i < rows.length; i += IMPORT_CHUNK) {
+        const res = await sendChunk(i, true);
+        if (res.errors.length > 0) {
+          // Rare: the data changed between the check and the save. Stop here and say so.
+          setErrors(res.errors);
+          break;
+        }
+        saved += res.imported;
       }
+      setImported(saved);
     } catch (e) {
       setFailure(e);
+      if (saved > 0) setImported(saved);
     } finally {
+      // Rows already saved leave the list, so trying again cannot add them twice.
+      if (saved > 0) {
+        setRows((old) => old.slice(saved));
+        await client.invalidateQueries();
+      }
       setBusy('');
     }
   }
@@ -212,7 +228,12 @@ export function ImportPage() {
       ))}
       {imported !== null && (
         <p className="note ok" role="status">
-          {t('{n} students were imported.', { n: imported })}
+          {rows.length > 0
+            ? t(
+                '{n} students were imported and saved. The {left} students below were not saved yet: correct the problem shown and import again.',
+                { n: imported, left: rows.length },
+              )
+            : t('{n} students were imported.', { n: imported })}
         </p>
       )}
 

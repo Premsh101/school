@@ -265,6 +265,20 @@ describe('import', () => {
   });
 });
 
+describe('import across chunks', () => {
+  it('numbers blank admission numbers after the highest number in the whole file', async () => {
+    const res = await owner.post('/students/import?commit=1', {
+      branch_id: 1,
+      session_id: 1,
+      auto_after: 5000,
+      rows: [{ line: 2, name: 'Chunk Kid', class: '1' }],
+    });
+    expect(res.data.imported).toBe(1);
+    const list = (await owner.get('/students?session_id=1&q=Chunk')).data.rows;
+    expect(list[0].admission_no).toBe('5001');
+  });
+});
+
 describe('promotion planning (pure)', () => {
   const classes = [
     { id: 14, name: 'Class 11', sort_order: 14 },

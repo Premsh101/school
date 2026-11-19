@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { sessionName } from '../../shared/dates';
+import { can } from '../../shared/permissions';
 import {
   branchInput,
   sectionInput,
@@ -21,15 +22,22 @@ const isUniqueError = (e: unknown) => e instanceof Error && /UNIQUE constraint/i
 schoolRoutes.get('/home', async (c) => {
   const db = c.env.DB;
   const user = c.get('user');
+  // Counts are only for people who may see the lists they summarise.
+  const seeStudents = can(user.role, 'students.view');
+  const seeStaff = can(user.role, 'staff.view');
   const [students, staff] = await db.batch([
-    db.prepare(
-      `SELECT e.branch_id, COUNT(*) AS count FROM enrolments e
-        JOIN academic_sessions s ON s.id = e.session_id AND s.is_current = 1
-       WHERE e.status = 'studying' ${scopeSql(user, 'e.branch_id')} GROUP BY e.branch_id`,
-    ),
-    db.prepare(
-      `SELECT branch_id, COUNT(*) AS count FROM staff WHERE active = 1 ${scopeSql(user, 'branch_id')} GROUP BY branch_id`,
-    ),
+    db
+      .prepare(
+        `SELECT e.branch_id, COUNT(*) AS count FROM enrolments e
+          JOIN academic_sessions s ON s.id = e.session_id AND s.is_current = 1
+         WHERE e.status = 'studying' AND ?1 = 1 ${scopeSql(user, 'e.branch_id')} GROUP BY e.branch_id`,
+      )
+      .bind(seeStudents ? 1 : 0),
+    db
+      .prepare(
+        `SELECT branch_id, COUNT(*) AS count FROM staff WHERE active = 1 AND ?1 = 1 ${scopeSql(user, 'branch_id')} GROUP BY branch_id`,
+      )
+      .bind(seeStaff ? 1 : 0),
   ]);
   return c.json<HomeSummary>({
     students: students!.results as HomeSummary['students'],
