@@ -7,7 +7,7 @@ ships or a decision changes, edit this file in the same commit.
 ## 1. What we are building
 
 A web app for **Soni Pariya Public School** (Kamalganj, Farrukhabad, Uttar Pradesh),
-one school with **several branches**. Used daily by the owner/admin, branch
+one school with **several branches** (Kamalganj and Kannauj so far; more can be added). Used daily by the owner/admin, branch
 principals, accountants at the fee counter, and teachers, mostly on **phones**.
 
 It grows module by module:
