@@ -42,9 +42,9 @@ const branches = [
   { id: 1, name: 'Kamalganj', code: 'KMG', address: 'Main Road, Kamalganj', phone: '9000000001' },
   {
     id: 2,
-    name: 'Fatehgarh',
-    code: 'FTG',
-    address: 'Station Road, Fatehgarh',
+    name: 'Kannauj',
+    code: 'KNJ',
+    address: 'Kannauj',
     phone: '9000000002',
   },
 ];
