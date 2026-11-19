@@ -14,7 +14,7 @@ It grows module by module:
 
 | Phase | Module | Status |
 | --- | --- | --- |
-| 0 | Core: sign-in, roles, branches, sessions, classes, students, staff, settings, audit log | to build |
+| 0 | Core: sign-in, roles, branches, sessions, classes, students, staff, settings, audit log | built (v1 backup import and photos pending, see docs/decisions.md) |
 | 1 | Fees: rate chart, per-fee discounts, collection, receipts, dashboard, reports | to build |
 | 2 | Attendance: students (daily) and staff | later |
 | 3 | Lectures: subjects, timetable, lecture log, syllabus progress | later |
@@ -150,8 +150,10 @@ Every module exports a manifest so the shell can show it without hard-coding:
   roll number (unique within branch + class + section + session), admission type
   (New/Old), status (Studying/Left with date). A student has one record per
   session (enrolment) so history is kept across years.
-- Promotion tool: move a class to the next class for the new session in one step,
-  with exceptions (detained, left).
+- Promotion tool: move a class to the next class for the new session in one step.
+  Each student is marked Pass (next class), Fail (same class again) or Left (not moved).
+  The result is saved on that year's enrolment, so the student page shows the history
+  year by year. Rules in `docs/modules/core.md`.
 - Staff: name, phone, designation, branch, joining date, teaching or non-teaching,
   linked user login (optional).
 - Bulk import of students from CSV/Excel with a preview and error list.

@@ -6,6 +6,7 @@ export default tseslint.config(
   { ignores: ['dist', '.wrangler', 'node_modules', 'seed'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  { files: ['tests/**/*.ts'], rules: { '@typescript-eslint/no-explicit-any': 'off' } },
   {
     files: ['src/web/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },

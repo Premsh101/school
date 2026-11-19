@@ -6,7 +6,7 @@ export function parseCsv(text: string): string[][] {
   let row: string[] = [];
   let field = '';
   let quoted = false;
-  const src = text.replace(/^﻿/, '');
+  const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   for (let i = 0; i < src.length; i++) {
     const ch = src[i]!;
     if (quoted) {
@@ -47,6 +47,9 @@ export function toCsv(rows: (string | number | null | undefined)[][]): string {
     )
     .join('\r\n');
 }
+
+/** Rows sent to the server per request during an import. */
+export const IMPORT_CHUNK = 100;
 
 type ImportField = Exclude<keyof ImportRowInput, 'line'>;
 

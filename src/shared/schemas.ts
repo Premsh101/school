@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IMPORT_CHUNK } from './csv';
 import { isValidDate } from './dates';
 import { ROLES } from './permissions';
 
@@ -166,7 +167,6 @@ export const importRowInput = z.object({
   roll_no: z.string().trim().max(6).default(''),
   admission_type: z.string().trim().max(10).default(''),
 });
-export const IMPORT_CHUNK = 100;
 export const importInput = z.object({
   branch_id: id,
   session_id: id,
