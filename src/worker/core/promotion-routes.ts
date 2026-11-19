@@ -3,6 +3,7 @@ import { todayIST } from '../../shared/dates';
 import { promotionInput, type PromotionInput } from '../../shared/schemas';
 import type { PromotionCandidate, PromotionResult, SchoolClass } from '../../shared/types';
 import type { AppEnv } from '../env';
+import { enrolmentHooks } from '../modules';
 import { audit } from './audit';
 import { assertBranch, requirePermission } from './auth';
 import { AppError, parse } from './errors';
@@ -216,6 +217,7 @@ promotionRoutes.post('/promotion', requirePermission('students.promote'), async 
       summary: `Moved ${cls.name} from ${from.name} to ${to.name}: ${plan.summary.promoted} promoted, ${plan.summary.repeating} repeating, ${plan.summary.passed_out} passed out, ${plan.summary.left} left`,
       details: plan.summary,
     }),
+    ...enrolmentHooks(c, input.to_session_id),
   ]);
   return c.json<PromotionResult>(plan.summary);
 });

@@ -8,6 +8,7 @@ import {
 } from '../../shared/schemas';
 import type { Enrolment, Paged, Student, StudentDetail, StudentListRow } from '../../shared/types';
 import type { AppEnv, AuthUser, Ctx } from '../env';
+import { enrolmentHooks } from '../modules';
 import { audit } from './audit';
 import { assertBranch, branchScope, requirePermission, scopeSql } from './auth';
 import { AppError, intParam, notFound, parse } from './errors';
@@ -198,6 +199,7 @@ studentRoutes.post('/students', requirePermission('students.edit'), async (c) =>
           now,
           now,
         ),
+      ...enrolmentHooks(c, input.session_id),
     ]);
   } catch (e) {
     if (e instanceof Error && /UNIQUE constraint failed: students.admission_no/i.test(e.message)) {
@@ -301,6 +303,7 @@ studentRoutes.post('/students/:id/enrolments', requirePermission('students.edit'
       summary: `Enrolled ${detail.student.name} in a session`,
       details: input,
     }),
+    ...enrolmentHooks(c, input.session_id),
   ]);
   return c.json({ ok: true });
 });

@@ -4,6 +4,7 @@ import { parseLooseDate, todayIST } from '../../shared/dates';
 import { importInput, type ImportRowInput } from '../../shared/schemas';
 import type { ImportResult, ImportRowError, SchoolClass, Section } from '../../shared/types';
 import type { AppEnv } from '../env';
+import { enrolmentHooks } from '../modules';
 import { audit } from './audit';
 import { assertBranch, requirePermission } from './auth';
 import { notFound, parse } from './errors';
@@ -238,6 +239,7 @@ importRoutes.post('/students/import', requirePermission('students.import'), asyn
       branch_id: input.branch_id,
       summary: `Imported ${ready.length} students into ${sessionRow.name}`,
     }),
+    ...enrolmentHooks(c, input.session_id),
   ]);
   return c.json<ImportResult>({ errors: [], valid: ready.length, imported: ready.length });
 });

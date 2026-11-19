@@ -22,6 +22,8 @@ export interface WorkerModule {
     from: { id: number } | null,
     to: { start_year: number },
   ) => D1PreparedStatement[];
+  /** Extra statements to run in the same batch that adds enrolments to a session (e.g. copy their fees). */
+  onEnrolmentsAdded?: (c: Ctx, sessionId: number) => D1PreparedStatement[];
 }
 
 /** Add modules here as they are built. */
@@ -31,3 +33,7 @@ export const modules: WorkerModule[] = [];
 export function registerModules(list: WorkerModule[]): void {
   modules.push(...list);
 }
+
+/** Statements from every module for enrolments just added to a session. */
+export const enrolmentHooks = (c: Ctx, sessionId: number): D1PreparedStatement[] =>
+  modules.flatMap((m) => m.onEnrolmentsAdded?.(c, sessionId) ?? []);
