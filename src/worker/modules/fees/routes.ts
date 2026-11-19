@@ -197,13 +197,14 @@ async function loadStudentFees(
         )
         .bind(enrolmentId),
     ]);
-  let [studentRes, feeRes, receiptRes, rateRes] = await read();
-  const student = studentRes!.results[0] as FeeStudent | undefined;
+  const first = await read();
+  let [, feeRes, receiptRes, rateRes] = first;
+  const student = first[0]!.results[0] as FeeStudent | undefined;
   if (!student) throw notFound('Student');
   assertBranch(c.get('user'), student.branch_id);
   if (!feeRes!.results.length) {
     await db.batch(afterEnrolments(db, student.session_id));
-    [studentRes, feeRes, receiptRes, rateRes] = await read();
+    [, feeRes, receiptRes, rateRes] = await read();
   }
   const raw = feeRes!.results[0] as FeeRow | undefined;
   if (!raw)

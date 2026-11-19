@@ -21,6 +21,8 @@ export interface WebModule {
     group?: 'main' | 'school' | 'admin';
   }[];
   permissions: string[];
+  /** Links shown beside each year on a student's page, e.g. to that year's fees. */
+  studentLinks?: { to: (enrolmentId: number) => string; label: string; permission?: string }[];
   /** Cards shown on the home page. */
   dashboardWidgets: { id: string; component: ComponentType; permission?: string }[];
 }

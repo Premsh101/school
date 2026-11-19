@@ -66,12 +66,14 @@ export function Layout() {
   );
 }
 
+/** Entries that have other entries beneath them (/students, /fees) light up only on their own page. */
+const EXACT = ['/', '/students', '/fees'];
+
 function NavItemLink({ item }: { item: NavItem }) {
-  // "Students" must not light up on /students/import, which has its own entry.
   return (
     <NavLink
       to={item.to}
-      end={item.to === '/' || item.to === '/students'}
+      end={EXACT.includes(item.to)}
       className={({ isActive }) => (isActive ? 'active' : '')}
     >
       <Icon name={item.icon} />

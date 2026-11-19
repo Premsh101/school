@@ -52,6 +52,12 @@ const paths: Record<string, ReactNode> = {
     </>
   ),
   rupee: <path d="M7 5h10M7 9h10M7 5h3a4 4 0 010 8H7l7 7" />,
+  collect: (
+    <>
+      <rect x="3" y="6" width="18" height="13" rx="2" />
+      <path d="M3 10h18M7 15h4" />
+    </>
+  ),
   back: <path d="M15 5l-7 7 7 7" />,
   plus: <path d="M12 5v14M5 12h14" />,
   chevron: <path d="M9 5l7 7-7 7" />,

@@ -1,0 +1,317 @@
+/* Fees module styles. Colours come from the tokens in src/web/styles.css. */
+.stats {
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+.stat {
+  display: grid;
+  gap: 1px;
+  align-content: start;
+  padding-left: 10px;
+  border-left: 4px solid var(--line);
+}
+.stat.paid {
+  border-left-color: var(--paid);
+}
+.stat.overdue {
+  border-left-color: var(--overdue);
+}
+.stat-label {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.stat-value {
+  font-size: 1.35rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.overdue-text {
+  color: var(--overdue);
+}
+.meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meter-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--stamp);
+}
+.chart-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 4px 0 -4px;
+}
+.bars {
+  margin: 0;
+}
+.bars-plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+  padding-top: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.bars-col {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+}
+.bars-bar {
+  width: 100%;
+  max-width: 28px;
+  border-radius: 4px 4px 0 0;
+  background: var(--stamp);
+}
+.bars-col:hover .bars-bar,
+.bars-col:focus-visible .bars-bar {
+  opacity: 0.75;
+}
+.bars-peak {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.bars-tip {
+  display: none;
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.8rem;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.bars-col:nth-child(-n + 3) .bars-tip,
+.bars-col:nth-child(-n + 3) .bars-peak {
+  left: 0;
+  transform: none;
+}
+.bars-col:nth-last-child(-n + 3) .bars-tip,
+.bars-col:nth-last-child(-n + 3) .bars-peak {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.bars-col:hover .bars-tip,
+.bars-col:focus-visible .bars-tip {
+  display: block;
+}
+.bars-col:hover .bars-peak,
+.bars-col:focus-visible .bars-peak {
+  visibility: hidden;
+}
+.bars-axis {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+}
+.bars-axis span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.months {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, 1fr);
+}
+@media (min-width: 700px) {
+  .months {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+.month {
+  display: grid;
+  gap: 1px;
+  align-content: start;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+.month strong {
+  font-size: 0.95rem;
+}
+.month.paid {
+  background: var(--paid-soft);
+  border-color: var(--paid);
+}
+.month.due {
+  background: var(--overdue-soft);
+  border-color: var(--overdue);
+}
+.month.part {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+.month.waived {
+  border-style: dashed;
+  color: var(--muted);
+}
+.take {
+  font-size: 1.1rem;
+}
+.take strong {
+  font-size: 1.4rem;
+}
+.btn[aria-pressed='true'] {
+  border-color: var(--stamp);
+  background: var(--stamp-soft);
+  color: var(--stamp);
+}
+.fee-all {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1.4fr 1fr auto;
+  align-items: end;
+}
+.fee-row {
+  display: grid;
+  gap: 8px 10px;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: start;
+}
+.fee-row-title,
+.fee-row-pays {
+  grid-column: 1 / -1;
+}
+/* The card title names the fee; each input keeps its own label for screen readers. */
+.fee-row .field > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.receipt {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  background: #fff;
+  color: #111;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+}
+.receipt header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.receipt header div {
+  display: grid;
+  font-size: 0.82rem;
+}
+.receipt-school {
+  font-size: 1.1rem;
+  color: #5a3ea6;
+  line-height: 1.2;
+}
+.receipt-title {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-top: 2px solid #5a3ea6;
+  border-bottom: 1px solid #ccc;
+}
+.receipt .kv dt {
+  color: #555;
+}
+.receipt-amount {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 10px;
+  border: 2px solid #5a3ea6;
+  border-radius: 8px;
+}
+.receipt-amount strong {
+  font-size: 1.5rem;
+}
+.receipt-words {
+  font-style: italic;
+}
+.receipt footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 22px;
+  padding-top: 6px;
+  border-top: 1px dashed #999;
+  font-size: 0.85rem;
+}
+.receipt-cancelled {
+  display: grid;
+  padding: 6px 10px;
+  border: 2px solid #c0392b;
+  border-radius: 8px;
+  color: #c0392b;
+  font-weight: 700;
+  text-align: center;
+}
+.receipt-cancelled span {
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+.receipt.cancelled .kv dd {
+  text-decoration: line-through;
+}
+.report table {
+  font-size: 0.86rem;
+}
+.report tfoot td {
+  font-weight: 700;
+  border-bottom: 0;
+}
+@media print {
+  body {
+    font-size: 12pt;
+  }
+  .main {
+    max-width: none;
+    padding: 0;
+  }
+  .card,
+  .table-wrap,
+  .list,
+  .receipt {
+    box-shadow: none;
+    overflow: visible;
+  }
+  .receipt {
+    border: 0;
+  }
+}

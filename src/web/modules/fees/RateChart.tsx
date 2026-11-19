@@ -7,9 +7,9 @@ import {
   groupRates,
   type FeeAmounts,
   type FeeKey,
-  type FeeRate,
   type RateGroup,
 } from '../../../shared/fees';
+import type { FeeRateRow } from '../../../shared/fees-api';
 import { formatINR } from '../../../shared/format';
 import { api } from '../../app/api';
 import { useBoot } from '../../app/boot';
@@ -22,6 +22,7 @@ import {
   fieldErrors,
   Loading,
   PageHead,
+  SelectField,
   Sheet,
   useToast,
 } from '../../components/ui';
@@ -51,9 +52,12 @@ export function RateChartPage() {
   const session = boot.session;
   const canEdit = boot.can('fees.rates.edit');
   const [editing, setEditing] = useState<RateGroup | null>(null);
+  const [branchId, setBranchId] = useState<number>(
+    boot.activeBranches[0]?.id ?? boot.branches[0]?.id ?? 0,
+  );
   const rates = useQuery({
     queryKey: ['fees', 'rates', session?.id],
-    queryFn: () => api.get<FeeRate[]>(`/fees/rates?session_id=${session?.id}`),
+    queryFn: () => api.get<FeeRateRow[]>(`/fees/rates?session_id=${session?.id}`),
     enabled: !!session,
   });
   const start = useMutation({
@@ -65,14 +69,22 @@ export function RateChartPage() {
   });
 
   if (!session) return <Empty>{t('Open a session first.')}</Empty>;
-  const groups = rates.data ? groupRates(rates.data, boot.classes) : [];
+  const branchRates = (rates.data ?? []).filter((r) => r.branch_id === branchId);
+  const groups = groupRates(branchRates, boot.classes);
   return (
     <div className="stack">
       <PageHead title={t('Fee rate chart {session}', { session: session.name })}>
-        {rates.data && rates.data.length > 0 && (
-          <Button onClick={() => window.print()}>{t('Print')}</Button>
-        )}
+        {branchRates.length > 0 && <Button onClick={() => window.print()}>{t('Print')}</Button>}
       </PageHead>
+      {boot.branches.length > 1 && (
+        <SelectField
+          label={t('Branch')}
+          hint={t('Each branch has its own chart.')}
+          value={branchId}
+          onChange={(v) => setBranchId(Number(v))}
+          options={boot.branches.map((b) => ({ value: b.id, label: b.name }))}
+        />
+      )}
       <p className="muted small no-print">
         {canEdit
           ? t(
@@ -85,9 +97,14 @@ export function RateChartPage() {
       <ErrorNote error={rates.error ?? start.error} />
       {rates.isPending ? (
         <Loading />
-      ) : rates.data && rates.data.length === 0 ? (
+      ) : branchRates.length === 0 ? (
         <div className="card stack">
-          <p>{t('Session {session} has no rate chart yet.', { session: session.name })}</p>
+          <p>
+            {t('{branch} has no rate chart for {session} yet.', {
+              branch: boot.branchName(branchId),
+              session: session.name,
+            })}
+          </p>
           {canEdit ? (
             <Button variant="primary" block busy={start.isPending} onClick={() => start.mutate()}>
               {t('Start from the previous chart')}
@@ -151,7 +168,12 @@ export function RateChartPage() {
         </div>
       )}
       {editing && session && (
-        <RateSheet group={editing} sessionId={session.id} onClose={() => setEditing(null)} />
+        <RateSheet
+          group={editing}
+          sessionId={session.id}
+          branchId={branchId}
+          onClose={() => setEditing(null)}
+        />
       )}
     </div>
   );
@@ -166,22 +188,27 @@ const toAmounts = (d: Draft): FeeAmounts =>
 function RateSheet({
   group,
   sessionId,
+  branchId,
   onClose,
 }: {
   group: RateGroup;
   sessionId: number;
+  branchId: number;
   onClose: () => void;
 }) {
   const boot = useBoot();
   const client = useQueryClient();
   const toast = useToast();
   const [classIds, setClassIds] = useState(group.class_ids);
+  const [alsoBranches, setAlsoBranches] = useState<number[]>([]);
+  const otherBranches = boot.branches.filter((b) => b.id !== branchId);
   const [fresh, setFresh] = useState(toDraft(group.new));
   const [old, setOld] = useState(toDraft(group.old));
   const save = useMutation({
     mutationFn: () =>
       api.put('/fees/rates', {
         session_id: sessionId,
+        branch_ids: [branchId, ...alsoBranches],
         class_ids: classIds,
         new: toAmounts(fresh),
         old: toAmounts(old),
@@ -256,6 +283,25 @@ function RateSheet({
           <Total amounts={toAmounts(old)} />
         </strong>
       </div>
+      {otherBranches.length > 0 && (
+        <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend style={{ fontWeight: 600, fontSize: '0.92rem' }}>
+            {t('Also set these fees in')}
+          </legend>
+          {otherBranches.map((b) => (
+            <Check
+              key={b.id}
+              label={b.name}
+              checked={alsoBranches.includes(b.id)}
+              onChange={(on) =>
+                setAlsoBranches(
+                  on ? [...alsoBranches, b.id] : alsoBranches.filter((x) => x !== b.id),
+                )
+              }
+            />
+          ))}
+        </fieldset>
+      )}
       <p className="muted small">
         {t(
           'Amounts are in whole rupees. Leave a box empty if the fee does not apply. The higher practical option is for Class 11 and 12 students who take the costlier practical.',

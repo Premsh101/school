@@ -6,6 +6,7 @@ import type { Enrolment, StudentDetail } from '../../shared/types';
 import { api } from '../app/api';
 import { useBoot } from '../app/boot';
 import { t } from '../app/i18n';
+import { webModules } from '../modules';
 import { PlaceFields, placeToInput, type Place } from '../components/PlaceFields';
 import {
   Badge,
@@ -34,6 +35,10 @@ export function StudentDetailPage() {
   if (detail.error) return <ErrorNote error={detail.error} />;
   const { student: s, enrolments } = detail.data;
   const canEdit = boot.can('students.edit');
+  const moduleLinks = webModules
+    .filter((m) => boot.modules[m.id] !== false)
+    .flatMap((m) => m.studentLinks ?? [])
+    .filter((link) => !link.permission || boot.can(link.permission));
   const inChosenSession = enrolments.some((e) => e.session_id === boot.session?.id);
   const gender = { male: t('Boy'), female: t('Girl'), other: t('Other'), '': '' }[s.gender];
 
@@ -110,6 +115,11 @@ export function StudentDetailPage() {
                   )}
                 </div>
               </div>
+              {moduleLinks.map((link) => (
+                <Link key={link.label} to={link.to(e.id)} className="btn small">
+                  {t(link.label)}
+                </Link>
+              ))}
               {canEdit && boot.user.branch_ids.includes(e.branch_id) && (
                 <Button
                   small
