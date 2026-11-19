@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:migrate": "wrangler d1 migrations apply DB --local",
-    "seed": "node seed/seed.mjs && wrangler d1 execute DB --local --file seed/.seed.sql"
+    "seed": "node seed/seed.mjs && wrangler d1 execute DB --local --file seed/.seed.sql",
+    "seed:fees": "node seed/seed-fees.mjs"
   },
   "repository": {
     "type": "git",

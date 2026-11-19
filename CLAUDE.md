@@ -15,7 +15,7 @@ It grows module by module:
 | Phase | Module | Status |
 | --- | --- | --- |
 | 0 | Core: sign-in, roles, branches, sessions, classes, students, staff, settings, audit log | built (v1 backup import and photos pending, see docs/decisions.md) |
-| 1 | Fees: rate chart, per-fee discounts, collection, receipts, dashboard, reports | in progress: rate chart built (admin-editable); the rest to build |
+| 1 | Fees: rate chart, per-fee discounts, collection, receipts, dashboard, reports | built (v1 backup import pending, see docs/modules/fees.md) |
 | 2 | Attendance: students (daily) and staff | later |
 | 3 | Lectures: subjects, timetable, lecture log, syllabus progress | later |
 | 4 | Leave: staff leave types, quotas, apply and approve; student leave notes | later |
@@ -192,8 +192,9 @@ practical, practical (higher option), TBDB etc., monthly fee. Amounts in ₹.
 Admin can edit the chart per session. Editing it never changes students already
 enrolled; their fees are copied at enrolment.
 
-**Open question (ask the owner before finalising):** is the monthly fee charged
-for 12 months, or for fewer? Default 12, editable per student.
+**Decided (owner left it to us):** the monthly fee is charged for 12 months by default,
+editable per student. Each branch has its own rate chart per session, so Kannauj can
+differ from Kamalganj; a new branch starts with a copy.
 
 ### Fee rules
 

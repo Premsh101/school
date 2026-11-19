@@ -2,6 +2,43 @@
 
 Short, dated notes on technical choices. Newest first.
 
+## 2026-11-19 — Phase 1 (fees)
+
+**One pure money module.** Every calculation (discounts, due today, overdue, oldest-first
+allocation, receipt wording, amount in words) is in `src/shared/fees.ts` and unit-tested.
+Lists and reports need the same position for thousands of students, so the rules are also
+written once in SQL (`positionSql`); an API test compares the two.
+
+**Student fees are stored as a JSON list plus totals** in `student_fees`, one row per
+enrolment. The list keeps the type and value of each discount; the totals let SQL add up
+a whole school without unpacking JSON. `paid` and `counter_discount` are recalculated from
+the receipts table in the same batch as every receipt save or cancel, so they cannot drift.
+
+**Receipt numbers** are taken inside the `INSERT` (`MAX(seq) + 1` for the branch) with a
+unique index behind it, and the same statement refuses a payment that would exceed
+pending, so two phones saving at once cannot clash or over-collect.
+
+**Fees are copied at enrolment through a module hook** (`onEnrolmentsAdded`), in the same
+batch that adds the student, so core code never writes to fees tables. Students who
+arrive another way (a restored backup) get fees on first view or from "Set up their fees"
+on the dashboard.
+
+**Rate chart is per branch.** The owner has branches in different towns; one row per
+session + branch + class + new/old.
+
+**Rows read.** A collect search or dashboard reads one session's students (a few thousand
+rows). At about 3,000 students that allows well over a thousand such requests a day
+inside the free 5 million rows; the search waits for typing to pause to keep it low.
+
+**Reports return at most 3,000 rows** and say so when cut; "Download for Excel" is a CSV
+file made in the browser.
+
+**Charts** are single-colour bars and meters with the numbers always written beside them,
+so nothing depends on telling colours apart.
+
+**Fee demo data goes through the API** (`npm run seed:fees`) instead of raw SQL, so the
+demo follows exactly the rules of the fee counter.
+
 ## 2026-11-19 — Phase 0
 
 **Free-plan limits checked (Cloudflare docs, 19 Nov 2026).** Workers: 10 ms CPU per

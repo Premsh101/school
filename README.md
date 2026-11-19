@@ -4,11 +4,11 @@ A web app for running the school's branches from a phone: students, staff, class
 (module by module) fees, attendance, lectures and leave. It runs on Cloudflare's free plan:
 one Worker serves both the API and the web pages, and data lives in a D1 database.
 
-| Phase | Module                                                                     | Status      |
-| ----- | -------------------------------------------------------------------------- | ----------- |
-| 0     | Core: sign-in, roles, branches, sessions, classes, students, staff, backup | built       |
-| 1     | Fees (rate chart built, rest to come)                                      | in progress |
-| 2–4   | Attendance, lectures, leave                                                | later       |
+| Phase | Module                                                                     | Status |
+| ----- | -------------------------------------------------------------------------- | ------ |
+| 0     | Core: sign-in, roles, branches, sessions, classes, students, staff, backup | built  |
+| 1     | Fees: rate chart, discounts, collection, receipts, dashboard, reports      | built  |
+| 2–4   | Attendance, lectures, leave                                                | later  |
 
 - **Setting it up for the first time (no coding needed):** [docs/setup-guide.md](docs/setup-guide.md)
 - **What the core module does:** [docs/modules/core.md](docs/modules/core.md)
@@ -33,6 +33,8 @@ empty local database before opening the app:
 ```bash
 npm run db:migrate
 npm run seed       # sign in as admin / principal / accountant / teacher, password demo12345
+npm run dev        # then, in a second terminal:
+npm run seed:fees  # discounts and receipts from April to today
 ```
 
 Other commands:
