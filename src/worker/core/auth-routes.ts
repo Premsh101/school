@@ -118,6 +118,10 @@ authRoutes.post('/setup', async (c) => {
     db
       .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('school_name', ?)")
       .bind(input.school_name),
+    // Modules prepare the first session too, e.g. fees fills in the rate chart.
+    ...modules.flatMap(
+      (m) => m.onSessionOpened?.(c, null, { start_year: input.session_start_year }) ?? [],
+    ),
     db.prepare("DELETE FROM settings WHERE key LIKE 'restore_token%'"),
     db
       .prepare(

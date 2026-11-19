@@ -26,3 +26,8 @@ export interface WorkerModule {
 
 /** Add modules here as they are built. */
 export const modules: WorkerModule[] = [];
+
+/** Called once by the app entry, which avoids modules and this file importing each other in a loop. */
+export function registerModules(list: WorkerModule[]): void {
+  modules.push(...list);
+}

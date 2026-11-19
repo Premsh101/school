@@ -85,10 +85,19 @@ export function navItems(
   ];
   const fromModules: NavItem[] = webModules
     .filter((m) => modulesOn[m.id] !== false)
-    .flatMap((m) => m.navItems.map((item) => ({ ...item, group: 'main' as const })));
-  return [...core.slice(0, 1), ...fromModules, ...core.slice(1)].filter(
-    (item) => !item.permission || can(item.permission),
-  );
+    .flatMap((m) =>
+      m.navItems.map((item) => ({
+        ...item,
+        label: t(item.label),
+        group: item.group ?? ('main' as const),
+      })),
+    );
+  // Module entries come first inside their group (after Home in the main group).
+  const merged = [...core.slice(0, 1), ...fromModules, ...core.slice(1)];
+  const order: NavItem['group'][] = ['main', 'school', 'admin', 'me'];
+  return order
+    .flatMap((g) => merged.filter((item) => item.group === g))
+    .filter((item) => !item.permission || can(item.permission));
 }
 
 export const GROUP_TITLES: Record<NavItem['group'], string> = {

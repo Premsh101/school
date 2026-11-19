@@ -674,6 +674,50 @@ th {
   white-space: nowrap;
 }
 
+.rate-cards {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.rate-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  break-inside: avoid;
+}
+.rate-table th,
+.rate-table td {
+  padding: 5px 0;
+}
+.rate-table .num {
+  padding-left: 12px;
+  vertical-align: top;
+}
+.rate-table th[scope='row'] {
+  color: var(--ink);
+  font-weight: 400;
+  white-space: normal;
+}
+.rate-table tfoot th,
+.rate-table tfoot td {
+  border-bottom: 0;
+  font-weight: 700;
+  color: var(--stamp);
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rate-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.rate-edit input {
+  text-align: right;
+}
 dialog.sheet {
   width: min(560px, 100%);
   max-width: 100%;

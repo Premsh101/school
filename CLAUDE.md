@@ -15,7 +15,7 @@ It grows module by module:
 | Phase | Module | Status |
 | --- | --- | --- |
 | 0 | Core: sign-in, roles, branches, sessions, classes, students, staff, settings, audit log | built (v1 backup import and photos pending, see docs/decisions.md) |
-| 1 | Fees: rate chart, per-fee discounts, collection, receipts, dashboard, reports | to build |
+| 1 | Fees: rate chart, per-fee discounts, collection, receipts, dashboard, reports | in progress: rate chart built (admin-editable); the rest to build |
 | 2 | Attendance: students (daily) and staff | later |
 | 3 | Lectures: subjects, timetable, lecture log, syllabus progress | later |
 | 4 | Leave: staff leave types, quotas, apply and approve; student leave notes | later |

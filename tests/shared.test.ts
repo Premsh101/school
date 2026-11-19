@@ -9,6 +9,7 @@ import {
   sessionStartYearFor,
   todayIST,
 } from '../src/shared/dates';
+import { admissionTotal, DEFAULT_RATE_CHART, groupRates, type FeeRate } from '../src/shared/fees';
 import { formatINR } from '../src/shared/format';
 import { can, manageableRoles } from '../src/shared/permissions';
 
@@ -109,5 +110,61 @@ describe('csv', () => {
     expect(matchClassName('LKG', names)).toBe('KG 1');
     expect(matchClassName('kg 2', names)).toBe('KG 2');
     expect(matchClassName('13', names)).toBeNull();
+  });
+});
+
+describe('fee rate chart', () => {
+  it('matches the "at admission" totals printed on the 2026-27 chart', () => {
+    // [new, old] and, for Class 11 and 12, the totals with the higher practical option
+    const printed = [
+      [3800, 2500],
+      [4400, 2800],
+      [4800, 3100],
+      [7200, 5300],
+      [8000, 5800],
+      [8500, 6000, 8800, 6300],
+      [9500, 7000, 9800, 7300],
+    ];
+    DEFAULT_RATE_CHART.forEach((g, i) => {
+      const [n, o, nAlt, oAlt] = printed[i]!;
+      expect(admissionTotal(g.new)).toBe(n);
+      expect(admissionTotal(g.old)).toBe(o);
+      expect(admissionTotal(g.new, true)).toBe(nAlt ?? n);
+      expect(admissionTotal(g.old, true)).toBe(oAlt ?? o);
+    });
+  });
+  it('groups neighbouring classes with the same fees, like the paper chart', () => {
+    const names = [
+      'Nursery',
+      'KG 1',
+      'KG 2',
+      ...Array.from({ length: 12 }, (_, i) => `Class ${i + 1}`),
+    ];
+    const classes = names.map((name, i) => ({ id: i + 1, name, sort_order: i + 1 }));
+    const rates: FeeRate[] = DEFAULT_RATE_CHART.flatMap((g) =>
+      classes
+        .filter((c) => c.sort_order >= g.from_order && c.sort_order <= g.to_order)
+        .flatMap((c) => [
+          { class_id: c.id, admission_type: 'new' as const, ...g.new },
+          { class_id: c.id, admission_type: 'old' as const, ...g.old },
+        ]),
+    );
+    expect(groupRates(rates, classes).map((g) => g.label)).toEqual([
+      'Nursery to KG 2',
+      'Class 1 to 5',
+      'Class 6 to 8',
+      'Class 9',
+      'Class 10',
+      'Class 11',
+      'Class 12',
+    ]);
+    // changing one class splits its group
+    rates.find((r) => r.class_id === 5 && r.admission_type === 'old')!.monthly = 850;
+    expect(
+      groupRates(rates, classes)
+        .map((g) => g.label)
+        .slice(0, 4),
+    ).toEqual(['Nursery to KG 2', 'Class 1', 'Class 2', 'Class 3 to 5']);
+    expect(groupRates([], classes).map((g) => g.label)).toEqual(['Nursery to Class 12']);
   });
 });

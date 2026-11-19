@@ -4,14 +4,15 @@ A web app for running the school's branches from a phone: students, staff, class
 (module by module) fees, attendance, lectures and leave. It runs on Cloudflare's free plan:
 one Worker serves both the API and the web pages, and data lives in a D1 database.
 
-| Phase | Module                                                                     | Status |
-| ----- | -------------------------------------------------------------------------- | ------ |
-| 0     | Core: sign-in, roles, branches, sessions, classes, students, staff, backup | built  |
-| 1     | Fees                                                                       | next   |
-| 2–4   | Attendance, lectures, leave                                                | later  |
+| Phase | Module                                                                     | Status      |
+| ----- | -------------------------------------------------------------------------- | ----------- |
+| 0     | Core: sign-in, roles, branches, sessions, classes, students, staff, backup | built       |
+| 1     | Fees (rate chart built, rest to come)                                      | in progress |
+| 2–4   | Attendance, lectures, leave                                                | later       |
 
 - **Setting it up for the first time (no coding needed):** [docs/setup-guide.md](docs/setup-guide.md)
 - **What the core module does:** [docs/modules/core.md](docs/modules/core.md)
+- **Fees and the rate chart:** [docs/modules/fees.md](docs/modules/fees.md)
 - **Why things are built the way they are:** [docs/decisions.md](docs/decisions.md)
 - **Full project brief:** [CLAUDE.md](CLAUDE.md)
 

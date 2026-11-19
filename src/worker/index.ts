@@ -12,7 +12,10 @@ import { staffRoutes } from './core/staff-routes';
 import { studentRoutes } from './core/students-routes';
 import { userRoutes } from './core/users-routes';
 import type { AppEnv } from './env';
-import { modules } from './modules';
+import { modules, registerModules } from './modules';
+import { feesModule } from './modules/fees';
+
+registerModules([feesModule]);
 
 const api = new Hono<AppEnv>();
 
