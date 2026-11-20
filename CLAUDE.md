@@ -135,6 +135,9 @@ Every module exports a manifest so the shell can show it without hard-coding:
   stored, and the admin must choose a new password at the first sign-in.
   Migration `0004_initial_school_manager.sql` adds a management login `manager@sps.com` /
   `manager@123` on the same terms (owner's request, 2026-11-20).
+  Migration `0006_initial_school_demo.sql` adds a **Demo School** (code DEMO, `is_demo`) with
+  sample students, fees and receipts; "All schools" always leaves demo schools out (owner's
+  request, 2026-11-20). Rebuild it with `seed/demo/build.sh`, never by hand.
 - **Sign in only, no sign-up.** The admin creates every other login under Logins. A new login
   (or a password the admin resets) is a first password only: the person must choose their own
   at the first sign-in before they can do anything else.

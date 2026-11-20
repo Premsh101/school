@@ -1805,3 +1805,62 @@ th.num .th-sort {
     box-shadow: none;
   }
 }
+
+/* Grid children may shrink below their content, so wide tables scroll inside their card
+   instead of pushing the page sideways on phones. */
+.stack > * {
+  min-width: 0;
+}
+.rate-cards {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+}
+.rate-card {
+  overflow-x: auto;
+}
+.rate-table th,
+.rate-table td {
+  padding: 8px 10px;
+}
+.rate-table tbody th {
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.86rem;
+  white-space: normal;
+}
+.rate-table tfoot th,
+.rate-table tfoot td {
+  font-weight: 800;
+  color: var(--ink);
+  border-bottom: 0;
+}
+
+/* Sign out, at the bottom of the sidebar. */
+.side-signout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.side-signout:hover,
+.side-signout:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+}
+.shortcut.danger {
+  color: var(--overdue);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}

@@ -1,8 +1,9 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ROLE_LABELS } from '../../shared/permissions';
 import { api } from '../app/api';
 import { useBoot } from '../app/boot';
+import { useSignOut } from '../app/signout';
 import { t } from '../app/i18n';
 import {
   Button,
@@ -31,7 +32,6 @@ export function savedTheme(): Theme {
 
 export function AccountPage() {
   const boot = useBoot();
-  const client = useQueryClient();
   const toast = useToast();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -44,13 +44,7 @@ export function AccountPage() {
       toast(t('Password changed. Other devices have been signed out.'));
     },
   });
-  const logout = useMutation({
-    mutationFn: () => api.post('/auth/logout'),
-    onSuccess: () => {
-      client.clear();
-      window.location.assign('/');
-    },
-  });
+  const logout = useSignOut();
   const err = fieldErrors(change.error);
   return (
     <div className="stack">
@@ -126,6 +120,7 @@ export function AccountPage() {
           {t('Change password')}
         </Button>
       </form>
+      <ErrorNote error={logout.error} />
       <Button variant="danger" block busy={logout.isPending} onClick={() => logout.mutate()}>
         {t('Sign out')}
       </Button>

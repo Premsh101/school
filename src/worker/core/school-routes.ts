@@ -91,7 +91,7 @@ schoolRoutes.post('/branches', requirePermission('school.manage'), async (c) => 
     await db.batch([
       db
         .prepare(
-          'INSERT INTO branches (name, code, address, phone, active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO branches (name, code, address, phone, active, is_demo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         )
         .bind(
           input.name,
@@ -99,6 +99,7 @@ schoolRoutes.post('/branches', requirePermission('school.manage'), async (c) => 
           input.address,
           input.phone,
           input.active ? 1 : 0,
+          input.is_demo ? 1 : 0,
           new Date().toISOString(),
         ),
       audit(c, {
@@ -134,9 +135,17 @@ schoolRoutes.put('/branches/:id', requirePermission('school.manage'), async (c) 
     const [res] = await db.batch([
       db
         .prepare(
-          'UPDATE branches SET name = ?, code = ?, address = ?, phone = ?, active = ? WHERE id = ?',
+          'UPDATE branches SET name = ?, code = ?, address = ?, phone = ?, active = ?, is_demo = ? WHERE id = ?',
         )
-        .bind(input.name, input.code, input.address, input.phone, input.active ? 1 : 0, id),
+        .bind(
+          input.name,
+          input.code,
+          input.address,
+          input.phone,
+          input.active ? 1 : 0,
+          input.is_demo ? 1 : 0,
+          id,
+        ),
       audit(c, {
         action: 'update',
         entity: 'branch',

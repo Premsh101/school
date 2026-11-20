@@ -5,11 +5,12 @@ import type { HomeSummary } from '../../shared/types';
 import { api, query } from '../app/api';
 import { useBoot } from '../app/boot';
 import { t } from '../app/i18n';
+import { useSignOut } from '../app/signout';
 import { GROUP_TITLES, navItems } from '../app/nav';
 import { BarChart, ChartCard, Donut } from '../components/charts';
 import { Kpi } from '../components/dash';
 import { Icon } from '../components/icons';
-import { ErrorNote } from '../components/ui';
+import { ErrorNote, useToast } from '../components/ui';
 import { webModules } from '../modules';
 
 const count = (n: number) => n.toLocaleString('en-IN');
@@ -118,7 +119,7 @@ export function HomePage() {
           )}
           <Kpi
             label={t('Left this session')}
-            icon="logout"
+            icon="userLeft"
             tone="overdue"
             value={h ? count(h.left) : '–'}
             to="/reports?r=core.left"
@@ -228,6 +229,8 @@ function ShortcutGrid() {
 /** The full menu, for phones where the bottom bar only fits a few entries. */
 export function MorePage() {
   const boot = useBoot();
+  const toast = useToast();
+  const signOut = useSignOut(toast);
   const items = navItems(boot.can, boot.modules);
   return (
     <div className="stack">
@@ -251,6 +254,19 @@ export function MorePage() {
           </section>
         );
       })}
+      <div className="shortcuts">
+        <button
+          type="button"
+          className="shortcut danger"
+          onClick={() => signOut.mutate()}
+          disabled={signOut.isPending}
+        >
+          <span className="kpi-icon">
+            <Icon name="logout" />
+          </span>
+          <span>{signOut.isPending ? t('Signing out…') : t('Sign out')}</span>
+        </button>
+      </div>
     </div>
   );
 }

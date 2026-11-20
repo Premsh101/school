@@ -4,3 +4,4 @@ dist/
 .dev.vars
 *.log
 seed/.seed.sql
+seed/demo/.students.sql

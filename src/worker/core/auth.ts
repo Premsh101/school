@@ -62,7 +62,8 @@ export async function currentUser(c: Ctx): Promise<AuthUser | null> {
     `SELECT u.id, u.username, u.name, u.role, u.must_change_password, s.id AS session_id,
             s.branch_id AS session_branch_id,
             (SELECT active FROM branches WHERE id = s.branch_id) AS branch_active,
-            (SELECT group_concat(branch_id) FROM user_branches WHERE user_id = u.id) AS branch_ids
+            (SELECT group_concat(branch_id) FROM user_branches WHERE user_id = u.id) AS branch_ids,
+            (SELECT group_concat(id) FROM branches WHERE is_demo = 0) AS real_ids
        FROM auth_sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1`,
   )
@@ -77,6 +78,7 @@ export async function currentUser(c: Ctx): Promise<AuthUser | null> {
       session_branch_id: number | null;
       branch_active: number | null;
       branch_ids: string | null;
+      real_ids: string | null;
     }>();
   if (!row || !isRole(row.role)) return null;
   const assigned = row.branch_ids ? row.branch_ids.split(',').map(Number) : [];
@@ -91,7 +93,13 @@ export async function currentUser(c: Ctx): Promise<AuthUser | null> {
     role: row.role,
     assigned_branch_ids: assigned,
     session_branch_id: row.session_branch_id,
-    scope: row.session_branch_id === null ? null : [row.session_branch_id],
+    // "All schools" means every school except the demo ones, which hold sample data only.
+    scope:
+      row.session_branch_id === null
+        ? row.real_ids
+          ? row.real_ids.split(',').map(Number)
+          : []
+        : [row.session_branch_id],
     must_change_password: row.must_change_password === 1,
     session_id: row.session_id,
   };
@@ -123,7 +131,7 @@ export function assertCan(user: AuthUser, permission: Permission): void {
   }
 }
 
-/** Branch IDs this request may touch: the school chosen at sign-in, or null for every school. */
+/** Branch IDs this request may touch: the school chosen at sign-in, or every real (not demo) school. */
 export function branchScope(user: AuthUser): number[] | null {
   return user.scope;
 }

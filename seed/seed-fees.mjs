@@ -31,10 +31,17 @@ const rnd = (n) => {
 };
 const pad = (n) => String(n).padStart(2, '0');
 
+// SEED_SCHOOL picks one school by name (seed/demo/build.sh uses "Demo School"); otherwise
+// all schools.
+const schoolName = process.env.SEED_SCHOOL;
+const schoolId = schoolName
+  ? (await call('GET', '/bootstrap')).login_branches.find((b) => b.name === schoolName)?.id
+  : null;
+if (schoolName && !schoolId) throw new Error(`No school called ${schoolName}`);
 await call('POST', '/auth/login', {
   username: 'admin@sps.com',
-  password: 'admin@123',
-  branch_id: null,
+  password: process.env.SEED_PASSWORD ?? 'admin@123',
+  branch_id: schoolId,
 });
 const boot = await call('GET', '/bootstrap');
 const session = boot.sessions.find((s) => s.is_current);

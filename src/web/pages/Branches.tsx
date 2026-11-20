@@ -41,6 +41,7 @@ export function BranchesPage() {
                 </span>
               </span>
               {!b.active && <Badge tone="grey">{t('Closed')}</Badge>}
+              {!!b.is_demo && <Badge tone="grey">{t('Demo')}</Badge>}
               <Badge>{b.code}</Badge>
             </button>
           </li>
@@ -62,6 +63,7 @@ function BranchSheet({ branch, onClose }: { branch: Branch | null; onClose: () =
     address: branch?.address ?? '',
     phone: branch?.phone ?? '',
     active: branch ? !!branch.active : true,
+    is_demo: branch ? !!branch.is_demo : false,
   });
   const set =
     <K extends keyof typeof f>(key: K) =>
@@ -107,6 +109,11 @@ function BranchSheet({ branch, onClose }: { branch: Branch | null; onClose: () =
         inputMode="tel"
       />
       {branch && <Check label={t('Branch is open')} checked={f.active} onChange={set('active')} />}
+      <Check
+        label={t('Demo school: sample data, left out of "All schools"')}
+        checked={f.is_demo}
+        onChange={set('is_demo')}
+      />
       {!branch && (
         <p className="muted small">
           {t(

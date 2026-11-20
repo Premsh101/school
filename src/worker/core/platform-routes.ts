@@ -92,7 +92,8 @@ platformRoutes.get('/backup/:table', requirePermission('backup.manage'), async (
 export const restoreRoutes = new Hono<AppEnv>();
 
 /**
- * Starts a restore. Allowed only before the school has any students, so live data can never be
+ * Starts a restore. Allowed only before the school has any real students (demo schools do not
+ * count), so live data can never be
  * overwritten by mistake: by the signed-in admin on a new installation, or by anyone when no
  * login exists at all (a restore that was started and not finished).
  */
@@ -100,7 +101,12 @@ restoreRoutes.post('/restore/begin', async (c) => {
   const db = c.env.DB;
   const [users, students] = await db.batch([
     db.prepare('SELECT COUNT(*) AS n FROM users'),
-    db.prepare('SELECT COUNT(*) AS n FROM students'),
+    // Students of demo schools are sample data and do not count.
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM students s WHERE NOT EXISTS (
+         SELECT 1 FROM enrolments e JOIN branches b ON b.id = e.branch_id
+          WHERE e.student_id = s.id AND b.is_demo = 1)`,
+    ),
   ]);
   const noLogins = (users!.results[0] as { n: number }).n === 0;
   if (!noLogins) {
