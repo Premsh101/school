@@ -2,6 +2,28 @@
 
 Short, dated notes on technical choices. Newest first.
 
+## 2026-11-20 — The school ships with the first release
+
+**Migration `0003_initial_school.sql`** loads the school name and address, the branches
+Kamalganj (`KMG`) and Kannauj (`KNJ`), the session 2026-27 (current), section A in every
+class, and the printed 2026-27 fee chart for both branches. It deploys with the first
+release through the normal "apply migrations, then deploy" step, with nothing to do by hand.
+
+- Every statement is `INSERT OR IGNORE` and guarded by "no login exists yet", so it never
+  overwrites or adds to a school that was already set up, and running it twice changes
+  nothing. It is a new numbered file; no applied migration was edited.
+- **No password in the repo.** The owner's login is still created on the first visit, by a
+  screen that asks only for name, username and password. On a database without branches the
+  old full setup screen still appears, so setup works whichever way the database arrives.
+- **Restore** clears the loaded school when it starts (only possible while there is no login),
+  so a backup replaces it completely instead of mixing with it.
+- The fee amounts are written out in the migration and a test compares every row with
+  `DEFAULT_RATE_CHART` in `src/shared/fees.ts`, so the two cannot drift apart.
+- The Kannauj code `KNJ` is a guess. It can be changed under Branches; receipts already made
+  keep their old numbers, so change it before the first receipt.
+- The normal tests leave this migration out so they start from an empty school; two test
+  files apply it on purpose and check the first visit, the fee chart and restore.
+
 ## 2026-11-19 — Phase 1 (fees)
 
 **One pure money module.** Every calculation (discounts, due today, overdue, oldest-first

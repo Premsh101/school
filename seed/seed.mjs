@@ -35,43 +35,17 @@ const rnd = (n) => {
 };
 const pick = (list) => list[rnd(list.length)];
 
-insert('settings', { key: 'school_name', value: 'Soni Pariya Public School' });
-insert('settings', { key: 'school_address', value: 'Kamalganj, Farrukhabad, Uttar Pradesh' });
+// The school, both branches, the 2026-27 session and its fee chart are already loaded by
+// migration 0003, so this script only adds what is missing.
 
-const branches = [
-  { id: 1, name: 'Kamalganj', code: 'KMG', address: 'Main Road, Kamalganj', phone: '9000000001' },
-  {
-    id: 2,
-    name: 'Kannauj',
-    code: 'KNJ',
-    address: 'Kannauj',
-    phone: '9000000002',
-  },
-];
-for (const b of branches) {
-  insert('branches', { ...b, active: 1, created_at: now });
-  sql.push(
-    `INSERT INTO sections (branch_id, class_id, name) SELECT ${b.id}, id, 'A' FROM classes;`,
-  );
-}
-sql.push("INSERT INTO sections (branch_id, class_id, name) VALUES (1, 8, 'B');");
+sql.push("INSERT OR IGNORE INTO sections (branch_id, class_id, name) VALUES (1, 8, 'B');");
 
-insert('academic_sessions', {
-  id: 1,
-  name: '2025-26',
-  start_year: 2025,
-  start_month: 4,
-  is_current: 0,
-  created_at: now,
-});
-insert('academic_sessions', {
-  id: 2,
-  name: '2026-27',
-  start_year: 2026,
-  start_month: 4,
-  is_current: 1,
-  created_at: now,
-});
+// Last year, so students can show their history. This year's session is already there.
+sql.push(
+  `INSERT OR IGNORE INTO academic_sessions (name, start_year, start_month, is_current, created_at) VALUES ('2025-26', 2025, 4, 0, ${q(now)});`,
+);
+const LAST = "(SELECT id FROM academic_sessions WHERE name = '2025-26')";
+const THIS = "(SELECT id FROM academic_sessions WHERE name = '2026-27')";
 
 const users = [
   { id: 1, username: 'admin', name: 'Owner', role: 'admin', branches: [] },
@@ -216,12 +190,12 @@ for (const [branch, cls, count] of groups) {
       const lastClass = repeated ? cls : cls - 1;
       sql.push(
         `INSERT OR IGNORE INTO sections (branch_id, class_id, name) VALUES (${branch}, ${lastClass}, '${section}');`,
-        `INSERT INTO enrolments (student_id, session_id, branch_id, class_id, section_id, roll_no, admission_type, status, result, created_at, updated_at) VALUES (${id}, 1, ${branch}, ${lastClass}, ${sectionOf(branch, lastClass, section)}, NULL, 'new', 'studying', '${repeated ? 'fail' : 'pass'}', ${q(now)}, ${q(now)});`,
+        `INSERT INTO enrolments (student_id, session_id, branch_id, class_id, section_id, roll_no, admission_type, status, result, created_at, updated_at) VALUES (${id}, ${LAST}, ${branch}, ${lastClass}, ${sectionOf(branch, lastClass, section)}, NULL, 'new', 'studying', '${repeated ? 'fail' : 'pass'}', ${q(now)}, ${q(now)});`,
       );
     }
     const left = id % 15 === 0;
     sql.push(
-      `INSERT INTO enrolments (student_id, session_id, branch_id, class_id, section_id, roll_no, admission_type, status, left_date, created_at, updated_at) VALUES (${id}, 2, ${branch}, ${cls}, ${sectionOf(branch, cls, section)}, ${roll}, '${old ? 'old' : 'new'}', '${left ? 'left' : 'studying'}', ${left ? "'2026-08-10'" : 'NULL'}, ${q(now)}, ${q(now)});`,
+      `INSERT INTO enrolments (student_id, session_id, branch_id, class_id, section_id, roll_no, admission_type, status, left_date, created_at, updated_at) VALUES (${id}, ${THIS}, ${branch}, ${cls}, ${sectionOf(branch, cls, section)}, ${roll}, '${old ? 'old' : 'new'}', '${left ? 'left' : 'studying'}', ${left ? "'2026-08-10'" : 'NULL'}, ${q(now)}, ${q(now)});`,
     );
   }
 }

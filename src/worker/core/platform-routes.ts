@@ -100,7 +100,13 @@ restoreRoutes.post('/restore/begin', async (c) => {
     );
   }
   const token = newToken();
+  // The school loaded with the app (branches, session, fee chart) is cleared first, so the
+  // backup replaces it completely instead of mixing with it. Nothing else can be in the
+  // database yet: there is no login.
+  const keep = ['classes', 'audit_log'];
+  const clear = [...backupTables()].reverse().filter((t) => !keep.includes(t));
   await db.batch([
+    ...clear.map((t) => db.prepare(`DELETE FROM ${t}`)),
     db
       .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('restore_token', ?)")
       .bind(token),

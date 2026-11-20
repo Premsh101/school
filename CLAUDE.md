@@ -124,8 +124,11 @@ Every module exports a manifest so the shell can show it without hard-coding:
 ## 5. Phase 0: Core
 
 **Sign-in and roles**
-- First visit with an empty database shows a one-time setup screen that creates
-  the owner account and first branch. After that, the setup route is closed.
+- The school itself ships with the first release as migration `0003_initial_school.sql`:
+  name, branches Kamalganj (KMG) and Kannauj (KNJ), session 2026-27 (current), section A in
+  every class, and the printed 2026-27 fee chart for both branches. No password is ever
+  stored in the repo, so the first visit shows a one-time setup screen that creates only
+  the owner account. After that, the setup route is closed.
 - Username + password; session token in an httpOnly, Secure, SameSite=Lax cookie;
   sessions stored in D1 with expiry; sign out everywhere when a password changes.
 - Roles, each a set of permissions:

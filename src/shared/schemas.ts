@@ -42,6 +42,13 @@ export const setupInput = z.object({
   session_start_year: z.number().int().min(2000).max(2100),
 });
 
+/** Setup when the school, branches and fees are already loaded: only the owner's login is asked for. */
+export const ownerSetupInput = z.object({
+  owner_name: text(80).min(1, 'Enter your name'),
+  username,
+  password,
+});
+
 export const loginInput = z.object({
   username: z.string().trim().min(1),
   password: z.string().min(1),
@@ -189,6 +196,7 @@ export const promotionInput = z.object({
 
 export type BranchInput = z.infer<typeof branchInput>;
 export type SetupInput = z.infer<typeof setupInput>;
+export type OwnerSetupInput = z.infer<typeof ownerSetupInput>;
 export type UserInput = z.infer<typeof userInput>;
 export type StudentCreateInput = z.infer<typeof studentCreateInput>;
 export type StudentPersonInput = z.infer<typeof studentPersonInput>;

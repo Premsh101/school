@@ -120,21 +120,28 @@ If you cannot find the token field in step 8 on the first screen, finish with **
 
 ---
 
-## Step 6. Open the app and set up the school
+## Step 6. Open the app and create your login
 
-1. Open the `.workers.dev` address from Step 5 in your browser. You should see **Set up your school**.
-2. Fill in the form:
-   - **School name:** Soni Pariya Public School
-   - **Your name** and a **Username** (small letters, for example `prem`) and a **Password** of at least 8 characters. Write the password down in a safe place.
-   - **First branch:** name `Kamalganj`, short code `KMG`, address and phone.
-   - **Current session:** `2026-27`.
-3. Click **Create school**. You are signed in as the owner. This screen never appears again.
-4. Add the second branch. Tap **More**, then **Branches**, then **Add branch**. Name `Kannauj`, short code for example `KNJ`, and click **Save**. Every class in the new branch starts with section A.
-5. Check the fees. Tap **More**, then **Fee rate chart**. Use the **Branch** box to switch between Kamalganj and Kannauj. The printed 2026-27 chart is already there for both. Tap **Edit** on a class group to change any amount.
+The school is already loaded with the app, so you do not type it in:
+
+- the school name and address
+- the branches **Kamalganj** (code `KMG`) and **Kannauj** (code `KNJ`), each with section A in every class
+- the session **2026-27**, set as the current one
+- the printed 2026-27 fee chart, for both branches
+
+Only your own login is missing, because a password must never be kept in the code.
+
+1. Open the `.workers.dev` address from Step 5 in your browser. You should see **Soni Pariya Public School** and the words **Your school is ready**.
+2. Fill in **Your name**, a **Username** (small letters, for example `prem`) and a **Password** of at least 8 characters. Write the password down in a safe place.
+3. Click **Create my login**. You are signed in as the owner. This screen never appears again.
+4. Check the branches. Tap **More**, then **Branches**. Tap a branch to change its address, phone or short code. **The short code is printed on receipt numbers** (`KMG-00001`), so if you want a different code for Kannauj than `KNJ`, change it now, before the first receipt is made.
+5. Check the fees. Tap **More**, then **Fee rate chart**. Use the **Branch** box to switch between Kamalganj and Kannauj. Tap **Edit** on a class group to change any amount for that branch.
 6. Add the people who will use the app. Tap **More**, then **Logins**, then **Add login**. Choose a role (Principal, Accountant, Teacher or Staff), tick their branch, set a password, and tell it to the person.
 7. Add your students. Either tap **Students**, then **Add student** one by one, or tap **More**, then **Import students** to upload an Excel or CSV list. The page has a **Download sample file** button that shows the columns.
 
-Each student gets their fees copied from the branch's chart as soon as they are added.
+Each student gets their fees copied from their branch's chart as soon as they are added.
+
+**If you have a backup file from before:** on the first screen, tap **I have a backup file to restore** instead of creating a login. The school that came with the app is replaced completely by what is in your backup.
 
 ---
 

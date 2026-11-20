@@ -18,8 +18,14 @@ what a person cannot use.
 
 ## Rules
 
-- **First run:** an empty database shows the setup screen once. It creates the owner, the
-  first branch (with section A in every class) and the first session.
+- **First run:** the first release loads the school (migration `0003_initial_school.sql`):
+  the name and address, the branches Kamalganj (`KMG`) and Kannauj (`KNJ`) with section A in
+  every class, the session 2026-27 as current, and the printed 2026-27 fee chart for both
+  branches. A password is never loaded with the app, so the first visit shows a screen that
+  asks only for the owner's name, username and password, and then closes for good. On a
+  database that has no branches at all (for example after a restore was started and
+  abandoned) the same screen also asks for the school, the first branch and the session.
+  Starting a restore clears the loaded school first, so a backup replaces it completely.
 - **Sign-in:** 5 wrong passwords for a username within 15 minutes locks that username for
   the rest of the 15 minutes. Changing a password signs the person out on other devices;
   an admin resetting someone's password signs them out everywhere.

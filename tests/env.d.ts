@@ -5,6 +5,7 @@ declare global {
     interface Env {
       DB: D1Database;
       TEST_MIGRATIONS: D1Migration[];
+      TEST_SEED: D1Migration[];
     }
   }
 }

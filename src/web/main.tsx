@@ -68,7 +68,8 @@ function App() {
       </div>
     );
   }
-  if (boot.data.needs_setup) return <SetupPage />;
+  if (boot.data.needs_setup)
+    return <SetupPage preset={boot.data.preset} schoolName={boot.data.school.name} />;
   if (!boot.data.user) return <LoginPage school={boot.data.school} />;
 
   const page = (permission: string | undefined, element: React.ReactNode) => (

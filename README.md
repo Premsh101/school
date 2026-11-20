@@ -25,10 +25,11 @@ npm ci
 npm run dev        # API on :8787, web pages on http://localhost:5173
 ```
 
-Open http://localhost:5173. The first visit shows the one-time setup screen.
+Open http://localhost:5173. The school (Kamalganj and Kannauj branches, session 2026-27 and the
+fee chart) is already there; the first visit asks only for the owner's name, username and password.
 
-To start with demo data instead (2 branches, 45 students, staff, logins), run this on an
-empty local database before opening the app:
+To start with demo data instead (45 students, staff, logins, last year's history), run this on a
+freshly migrated local database before opening the app:
 
 ```bash
 npm run db:migrate

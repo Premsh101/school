@@ -44,6 +44,8 @@ export interface Me {
 }
 export interface Bootstrap {
   needs_setup: boolean;
+  /** Set when the school, branches, session and fee chart were loaded with the app. */
+  preset: { branches: string[]; session: string } | null;
   user: Me | null;
   school: { name: string; address: string; logo: string };
   branches: Branch[];
