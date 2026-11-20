@@ -14,7 +14,7 @@
       "binding": "DB",
       "database_name": "school_app",
       // Paste the ID of your own D1 database here (see docs/setup-guide.md, step 3).
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "ee03873c-4eaf-4bff-a0cb-295bd1f74c7e",
       "migrations_dir": "migrations",
     },
   ],
