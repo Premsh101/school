@@ -1,0 +1,53 @@
+{
+  "name": "school-app",
+  "version": "0.1.0",
+  "description": "School management system for Soni Pariya Public School",
+  "scripts": {
+    "dev": "npm run db:migrate && concurrently -n api,web \"wrangler dev\" \"vite\"",
+    "build": "vite build",
+    "preview": "npm run build && npm run db:migrate && wrangler dev",
+    "typecheck": "tsc -p tsconfig.worker.json && tsc -p tsconfig.web.json",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "seed": "node seed/seed.mjs && wrangler d1 execute DB --local --file seed/.seed.sql",
+    "seed:fees": "node seed/seed-fees.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Premsh101/school.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Premsh101/school/issues"
+  },
+  "homepage": "https://github.com/Premsh101/school#readme",
+  "dependencies": {
+    "@tanstack/react-query": "^5.108.1",
+    "hono": "^4.13.19",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.6",
+    "read-excel-file": "^9.3.19",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "@cloudflare/workers-types": "^5.20261119.1",
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.10.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.73.0",
+    "vite": "^8.3.8",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.165.0"
+  },
+  "private": true,
+  "type": "module"
+}

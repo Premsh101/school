@@ -7,15 +7,15 @@ ships or a decision changes, edit this file in the same commit.
 ## 1. What we are building
 
 A web app for **Soni Pariya Public School** (Kamalganj, Farrukhabad, Uttar Pradesh),
-one school with **several branches**. Used daily by the owner/admin, branch
+one school with **several branches** (Kamalganj and Kannauj so far; more can be added). Used daily by the owner/admin, branch
 principals, accountants at the fee counter, and teachers, mostly on **phones**.
 
 It grows module by module:
 
 | Phase | Module | Status |
 | --- | --- | --- |
-| 0 | Core: sign-in, roles, branches, sessions, classes, students, staff, settings, audit log | to build |
-| 1 | Fees: rate chart, per-fee discounts, collection, receipts, dashboard, reports | to build |
+| 0 | Core: sign-in, roles, branches, sessions, classes, students, staff, settings, audit log | built (v1 backup import and photos pending, see docs/decisions.md) |
+| 1 | Fees: rate chart, per-fee discounts, collection, receipts, dashboard, reports | built (v1 backup import pending, see docs/modules/fees.md) |
 | 2 | Attendance: students (daily) and staff | later |
 | 3 | Lectures: subjects, timetable, lecture log, syllabus progress | later |
 | 4 | Leave: staff leave types, quotas, apply and approve; student leave notes | later |
@@ -124,16 +124,28 @@ Every module exports a manifest so the shell can show it without hard-coding:
 ## 5. Phase 0: Core
 
 **Sign-in and roles**
-- First visit with an empty database shows a one-time setup screen that creates
-  the owner account and first branch. After that, the setup route is closed.
-- Username + password; session token in an httpOnly, Secure, SameSite=Lax cookie;
-  sessions stored in D1 with expiry; sign out everywhere when a password changes.
-- Roles, each a set of permissions:
-  - **Owner/Admin**: everything, all branches.
-  - **Principal**: everything in their branch(es) except school settings.
-  - **Accountant**: fees in their branch(es).
-  - **Teacher**: own classes and subjects (attendance, lectures, own leave).
-  - **Staff**: own leave and attendance only.
+- The school itself ships with the first release as migration `0003_initial_school.sql`:
+  name, schools (branches) Kamalganj (KMG) and Kannauj (KNJ), session 2026-27 (current),
+  section A in every class, the printed 2026-27 fee chart for both schools, and the first
+  admin login `admin@sps.com` / `admin@123` (owner's decision, 2026-11-20). Only a hash is
+  stored, and the admin must choose a new password at the first sign-in.
+- **Sign in only, no sign-up.** The admin creates every other login under Logins. A new login
+  (or a password the admin resets) is a first password only: the person must choose their own
+  at the first sign-in before they can do anything else.
+- **The sign-in screen asks for the school.** Everything the person sees is limited to that
+  school. Admin and management may also choose "All schools" and can switch school from the
+  top bar; an accountant can only choose a school assigned to them.
+- Username (an email like `name@sps.com` is fine) + password; session token in an httpOnly,
+  Secure, SameSite=Lax cookie; sessions stored in D1 with expiry, holding the chosen school;
+  sign out everywhere when a password changes.
+- Three roles (owner's decision, 2026-11-20):
+  - **Admin**: everything, all schools; the only role that creates logins, edits branches,
+    sessions, settings and the fee rate chart, sees the activity log and takes backups.
+  - **Management**: the daily work of all schools: students, import, promotion, staff,
+    sections, fees (collect, edit student fees, cancel receipts).
+  - **Accountant**: fees in their assigned school(s); can look students up but not edit them.
+  - Later phases (attendance, lectures, leave) may add teacher and staff roles; roles are
+    checked in code, so adding one needs no table rebuild.
 - Every API route checks permission **and** branch scope on the server.
 - Rate-limit failed sign-ins.
 
@@ -150,8 +162,10 @@ Every module exports a manifest so the shell can show it without hard-coding:
   roll number (unique within branch + class + section + session), admission type
   (New/Old), status (Studying/Left with date). A student has one record per
   session (enrolment) so history is kept across years.
-- Promotion tool: move a class to the next class for the new session in one step,
-  with exceptions (detained, left).
+- Promotion tool: move a class to the next class for the new session in one step.
+  Each student is marked Pass (next class), Fail (same class again) or Left (not moved).
+  The result is saved on that year's enrolment, so the student page shows the history
+  year by year. Rules in `docs/modules/core.md`.
 - Staff: name, phone, designation, branch, joining date, teaching or non-teaching,
   linked user login (optional).
 - Bulk import of students from CSV/Excel with a preview and error list.
@@ -190,8 +204,9 @@ practical, practical (higher option), TBDB etc., monthly fee. Amounts in ₹.
 Admin can edit the chart per session. Editing it never changes students already
 enrolled; their fees are copied at enrolment.
 
-**Open question (ask the owner before finalising):** is the monthly fee charged
-for 12 months, or for fewer? Default 12, editable per student.
+**Decided (owner left it to us):** the monthly fee is charged for 12 months by default,
+editable per student. Each branch has its own rate chart per session, so Kannauj can
+differ from Kamalganj; a new branch starts with a copy.
 
 ### Fee rules
 
@@ -212,7 +227,7 @@ for 12 months, or for fewer? Default 12, editable per student.
 - Payment can't exceed pending. Receipt date can't be in the future.
 - Receipt number = branch code + running number, e.g. `KMG-00163`, unique.
 - Payment modes: Cash, UPI, Bank, Cheque, with reference number.
-- Cancel receipt (admin/principal only) with a reason; balance recalculates.
+- Cancel receipt (admin/management only) with a reason; balance recalculates.
 - A student marked Left owes nothing further; what they paid stays in collections.
 - Late fee: not in v1; design so it can be added as another charge type later.
 
@@ -227,7 +242,7 @@ for 12 months, or for fewer? Default 12, editable per student.
 - **Add/edit student fees**: per-fee rows showing fee, discount type/value, and
   what the student pays; totals; due at admission.
 - **Rate chart** editor per session.
-- **Dashboard** (admin sees all branches or one; others their branch):
+- **Dashboard** (for the school chosen at sign-in, or all schools for admin/management):
   collected vs total, overdue now, due later, today / last 7 days / this month,
   collection by month (session), last 14 days, payment mode split, branch
   comparison, class-wise position, largest dues with phone, latest receipts,
