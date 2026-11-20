@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../app/api';
 import { schoolLogo } from '../app/boot';
+import { useSignOut } from '../app/signout';
 import { t } from '../app/i18n';
 import { Button, ErrorNote, fieldErrors, SelectField, TextField } from '../components/ui';
 
@@ -131,13 +132,7 @@ export function NewPasswordPage({
     },
     onSuccess: () => client.invalidateQueries(),
   });
-  const logout = useMutation({
-    mutationFn: () => api.post('/auth/logout'),
-    onSuccess: () => {
-      client.clear();
-      window.location.assign('/');
-    },
-  });
+  const logout = useSignOut();
   const err = fieldErrors(save.error);
   return (
     <AuthShell school={school} schools={[]}>

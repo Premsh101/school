@@ -106,6 +106,12 @@ const paths: Record<string, ReactNode> = {
   ),
   moon: <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" />,
   logout: <path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />,
+  userLeft: (
+    <>
+      <circle cx="10" cy="8" r="3.5" />
+      <path d="M3.5 20c.6-3.6 3.2-6 6.5-6 1.4 0 2.7.4 3.7 1.2M16 18h6" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="7" />

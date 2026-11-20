@@ -8,6 +8,7 @@ import { applyTheme } from '../pages/Account';
 import { api } from './api';
 import { schoolLogo, useBoot } from './boot';
 import { t } from './i18n';
+import { useSignOut } from './signout';
 import { GROUP_TITLES, navItems, type NavItem } from './nav';
 
 const ALL = 'all';
@@ -34,6 +35,7 @@ export function Layout() {
     },
     onError: (e) => toast(e instanceof Error ? e.message : t('Could not change school')),
   });
+  const signOut = useSignOut();
   const items = navItems(boot.can, boot.modules);
   const tabs = items.filter((i) => i.group === 'main').slice(0, 4);
   const groups = (['main', 'school', 'admin', 'me'] as const).map((g) => ({
@@ -83,6 +85,15 @@ export function Layout() {
             <small>{t(ROLE_LABELS[boot.user.role])}</small>
           </span>
         </Link>
+        <button
+          type="button"
+          className="side-signout"
+          onClick={() => signOut.mutate()}
+          disabled={signOut.isPending}
+        >
+          <Icon name="logout" />
+          {signOut.isPending ? t('Signing out…') : t('Sign out')}
+        </button>
       </nav>
 
       <div className="content">

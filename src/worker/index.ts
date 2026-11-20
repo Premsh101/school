@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { csrf } from 'hono/csrf';
+import { HTTPException } from 'hono/http-exception';
 import { grantModulePermissions, type Role } from '../shared/permissions';
 import { authRoutes } from './core/auth-routes';
 import { requireUser } from './core/auth';
@@ -63,6 +64,17 @@ api.notFound((c) => c.json({ error: 'This page does not exist on the server.' },
 api.onError((err, c) => {
   if (err instanceof AppError)
     return c.json({ error: err.message, fields: err.fields }, err.status);
+  // Hono's own refusals, such as the cross-site check on a post without an Origin.
+  if (err instanceof HTTPException)
+    return c.json(
+      {
+        error:
+          err.status === 403
+            ? 'This request was blocked for safety. Reload the page and try again.'
+            : 'The request was not understood. Reload the page and try again.',
+      },
+      err.status,
+    );
   if (err instanceof SyntaxError)
     return c.json({ error: 'The request was not understood. Reload the page and try again.' }, 400);
   console.error(err);

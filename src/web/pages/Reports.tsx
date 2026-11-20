@@ -64,7 +64,7 @@ function useGroups(): Group[] {
 const REPORT_ICONS: Record<string, string> = {
   students: 'students',
   strength: 'classes',
-  left: 'logout',
+  left: 'userLeft',
   collection: 'receipt',
   daywise: 'calendar',
   pending: 'alert',

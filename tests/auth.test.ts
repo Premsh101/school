@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { hashPassword, needsRehash, verifyPassword } from '../src/worker/core/password';
+import app from '../src/worker/index';
 import { addLogin, Client, OWNER, sectionId, setupSchool, signIn } from './helpers';
 
 describe('password hashing', () => {
@@ -93,10 +94,30 @@ describe('sign in only, no sign up', () => {
     });
   });
 
-  it('signs out', async () => {
+  it('signs out and clears the cookie', async () => {
     const c = await signIn(OWNER.username, OWNER.password);
-    await c.post('/auth/logout');
+    const res = await app.request(
+      'http://localhost/api/auth/logout',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: c.cookie },
+        body: '{}',
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toMatch(/^sid=;.*Max-Age=0/);
     expect((await c.get('/home')).status).toBe(401);
+  });
+
+  it('answers a blocked cross-site post with 403, not a server error', async () => {
+    const res = await app.request(
+      'http://localhost/api/auth/logout',
+      { method: 'POST', headers: { 'content-type': 'text/plain', origin: 'https://evil.example' } },
+      env,
+    );
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toMatch(/blocked/);
   });
 });
 
