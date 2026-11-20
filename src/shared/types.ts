@@ -7,6 +7,8 @@ export interface Branch {
   address: string;
   phone: string;
   active: number;
+  /** 1 = sample data only; left out of "All schools". */
+  is_demo: number;
 }
 export interface AcademicSession {
   id: number;

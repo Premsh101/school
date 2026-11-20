@@ -34,6 +34,7 @@ export const branchInput = z.object({
   address: text(200).default(''),
   phone: phone.default(''),
   active: z.boolean().default(true),
+  is_demo: z.boolean().default(false),
 });
 
 export const loginInput = z.object({

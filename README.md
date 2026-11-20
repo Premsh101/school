@@ -30,6 +30,12 @@ chart) is already there. Sign in with `admin@sps.com` / `admin@123`, choose a sc
 a new password when asked. A management login, `manager@sps.com` / `manager@123`, comes with it
 too (also asks for a new password first). There is no sign-up; the admin creates other logins.
 
+A **Demo School** (code `DEMO`) with 45 sample students, fees and receipts also comes with the
+app. Choose it at sign-in or in the school switcher to try things out; "All schools" leaves it
+out of every list, total and report. The admin can close it under Branches. Its data is built
+from the app's own fee rules by `seed/demo/build.sh`, which writes
+`migrations/0006_initial_school_demo.sql`.
+
 To start with demo data instead (45 students, staff, logins, last year's history), run this on a
 freshly migrated local database before opening the app:
 

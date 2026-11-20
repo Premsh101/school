@@ -52,7 +52,7 @@ authRoutes.get('/bootstrap', async (c) => {
     }>([
       db.prepare('SELECT COUNT(*) AS n FROM users'),
       db.prepare("SELECT key, value FROM settings WHERE key IN ('school_name', 'logo')"),
-      db.prepare('SELECT id, name FROM branches WHERE active = 1 ORDER BY id'),
+      db.prepare('SELECT id, name FROM branches WHERE active = 1 ORDER BY is_demo, id'),
     ]);
     const map = Object.fromEntries(settings!.results.map((r) => [r.key, r.value]));
     return c.json<Bootstrap>({
@@ -65,7 +65,8 @@ authRoutes.get('/bootstrap', async (c) => {
   const mine = seesAllBranches(user.role)
     ? ''
     : ` AND b.id IN (${user.assigned_branch_ids.map(Number).join(',') || 0})`;
-  const branchCols = 'SELECT id, name, code, address, phone, active FROM branches b WHERE 1';
+  const branchCols =
+    'SELECT id, name, code, address, phone, active, is_demo FROM branches b WHERE 1';
   const [settings, branches, myBranches, sessions, classes, sections] = await db.batch([
     db.prepare('SELECT key, value FROM settings'),
     db.prepare(`${branchCols} ${scopeSql(user, 'b.id')} ORDER BY id`),

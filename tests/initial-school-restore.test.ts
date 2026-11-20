@@ -34,14 +34,19 @@ describe('restoring a backup onto a new installation', () => {
     expect(begin.status).toBe(403);
     expect(begin.data.error).toMatch(/before any students are added/);
     // take the student out again for the next test
+    const id = res.data.id;
     await env.DB.batch([
-      env.DB.prepare('DELETE FROM student_fees'),
-      env.DB.prepare('DELETE FROM enrolments'),
-      env.DB.prepare('DELETE FROM students'),
+      env.DB.prepare(
+        'DELETE FROM student_fees WHERE enrolment_id IN (SELECT id FROM enrolments WHERE student_id = ?)',
+      ).bind(id),
+      env.DB.prepare('DELETE FROM enrolments WHERE student_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM students WHERE id = ?').bind(id),
     ]);
   });
 
   it('clears everything that came with the app, so the backup replaces it completely', async () => {
+    // only the Demo School has students now, and sample data does not block a restore
+    expect(await count('students')).toBe(45);
     expect((await admin.post('/restore/begin')).status).toBe(200);
     for (const table of [
       'branches',
@@ -50,6 +55,8 @@ describe('restoring a backup onto a new installation', () => {
       'fee_rates',
       'users',
       'auth_sessions',
+      'students',
+      'receipts',
     ]) {
       expect(await count(table), table).toBe(0);
     }

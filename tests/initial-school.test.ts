@@ -29,6 +29,7 @@ describe('the school that comes with the first release', () => {
     expect(branches.results).toEqual([
       { id: 1, name: 'Kamalganj', code: 'KMG', active: 1 },
       { id: 2, name: 'Kannauj', code: 'KNJ', active: 1 },
+      { id: 3, name: 'Demo School', code: 'DEMO', active: 1 },
     ]);
     const sessions = await env.DB.prepare(
       'SELECT name, start_year, start_month, is_current FROM academic_sessions',
@@ -36,7 +37,7 @@ describe('the school that comes with the first release', () => {
     expect(sessions.results).toEqual([
       { name: '2026-27', start_year: 2026, start_month: 4, is_current: 1 },
     ]);
-    expect(await count('sections')).toBe(30);
+    expect(await count('sections')).toBe(45); // 15 classes in each of the three schools
   });
 
   it('loads the admin and management logins, with only a hash of their passwords', async () => {
@@ -70,8 +71,8 @@ describe('the school that comes with the first release', () => {
   });
 
   it('loads exactly the printed fee chart for both schools', async () => {
-    expect(await count('fee_rates')).toBe(60);
-    for (const branch of [1, 2]) {
+    expect(await count('fee_rates')).toBe(90); // the Demo School has a copy of Kamalganj's
+    for (const branch of [1, 2, 3]) {
       for (const group of DEFAULT_RATE_CHART) {
         for (const type of ['new', 'old'] as const) {
           for (let order = group.from_order; order <= group.to_order; order++) {
@@ -117,6 +118,7 @@ describe('first sign-in', () => {
     expect(boot.login_branches).toEqual([
       { id: 1, name: 'Kamalganj' },
       { id: 2, name: 'Kannauj' },
+      { id: 3, name: 'Demo School' },
     ]);
     expect([401, 404]).toContain((await new Client().post('/setup', {})).status);
   });

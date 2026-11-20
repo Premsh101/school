@@ -132,6 +132,9 @@ Everything is already loaded with the app, so you do not type it in:
 - the first admin login: **admin@sps.com**, password **admin@123**
 - a management login to try the app: **manager@sps.com**, password **manager@123** (whoever signs in
   with it first must choose a new password; you can switch it off under **Logins**)
+- a **Demo School** with 45 sample students, fees and receipts, for trying the app: choose
+  **Demo School** at sign-in or in the school list at the top. It is never counted in
+  **All schools**. Close it under **Branches** when you no longer need it.
 
 **Do this step straight after the first deploy.** Until you set your own password, anyone who
 knows `admin@123` could sign in as the admin. The same goes for `manager@123`: sign in with it
