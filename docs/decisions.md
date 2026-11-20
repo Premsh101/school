@@ -29,6 +29,15 @@ dashboard proper graphs, filters and reports.
   (`reports`), so attendance and others can add theirs later. Student reports (list, class
   strength, students who left) are new.
 
+## 2026-11-20 — A management login on the live site
+
+**Owner's request:** a demo login for management on production. Migration 0004 adds
+`manager@sps.com` / `manager@123` (role management, all schools), stored as a hash and marked
+`must_change_password`, exactly like the admin login: the first person to sign in with it chooses
+the real password and `manager@123` stops working. It is added only if the admin login exists and
+no `manager@sps.com` login does, so it never overwrites anything. It sees real school data (there
+is no separate demo data on the live site); the admin can switch it off under Logins.
+
 ## 2026-11-20 — Three roles, school chosen at sign-in, shipped admin login
 
 **Owner's decisions:** roles are admin, management and accountant; there is sign-in only, no

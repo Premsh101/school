@@ -133,6 +133,8 @@ Every module exports a manifest so the shell can show it without hard-coding:
   section A in every class, the printed 2026-27 fee chart for both schools, and the first
   admin login `admin@sps.com` / `admin@123` (owner's decision, 2026-11-20). Only a hash is
   stored, and the admin must choose a new password at the first sign-in.
+  Migration `0004_initial_school_manager.sql` adds a management login `manager@sps.com` /
+  `manager@123` on the same terms (owner's request, 2026-11-20).
 - **Sign in only, no sign-up.** The admin creates every other login under Logins. A new login
   (or a password the admin resets) is a first password only: the person must choose their own
   at the first sign-in before they can do anything else.

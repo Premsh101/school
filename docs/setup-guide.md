@@ -130,9 +130,12 @@ Everything is already loaded with the app, so you do not type it in:
 - the session **2026-27**, set as the current one
 - the printed 2026-27 fee chart, for both schools
 - the first admin login: **admin@sps.com**, password **admin@123**
+- a management login to try the app: **manager@sps.com**, password **manager@123** (whoever signs in
+  with it first must choose a new password; you can switch it off under **Logins**)
 
 **Do this step straight after the first deploy.** Until you set your own password, anyone who
-knows `admin@123` could sign in as the admin.
+knows `admin@123` could sign in as the admin. The same goes for `manager@123`: sign in with it
+(or give it to the person who will use it) soon, or switch it off under **Logins**.
 
 1. Open the `.workers.dev` address from Step 5 in your browser. You see **Sign in to continue**.
 2. In **School**, choose **All schools (admin and management)**.
