@@ -21,6 +21,10 @@ interface Boot extends Bootstrap {
   refresh: () => Promise<unknown>;
 }
 
+/** The school's logo: the one uploaded in Settings, or the one that ships with the app. */
+export const DEFAULT_LOGO = '/logo-256.webp';
+export const schoolLogo = (uploaded: string | undefined) => uploaded || DEFAULT_LOGO;
+
 const BootContext = createContext<Boot | null>(null);
 
 export function useBoot(): Boot {

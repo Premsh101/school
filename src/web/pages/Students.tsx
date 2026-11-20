@@ -10,6 +10,7 @@ import {
   Badge,
   Empty,
   ErrorNote,
+  avatarTone,
   initials,
   Loading,
   PageHead,
@@ -136,7 +137,7 @@ export function StudentsPage() {
             {list.data.rows.map((s) => (
               <li key={s.enrolment_id}>
                 <Link to={`/students/${s.student_id}`} className="item">
-                  <span className="avatar" aria-hidden="true">
+                  <span className={`avatar ${avatarTone(s.name)}`} aria-hidden="true">
                     {initials(s.name)}
                   </span>
                   <span className="grow">

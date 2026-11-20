@@ -60,9 +60,13 @@ specification for fee rules, screens and reports; do not copy its structure.
 - Frontend: **React + Vite + TypeScript**, React Router, TanStack Query. Built to
   `dist/` and served by the same Worker as static assets (single deploy, one
   domain, no CORS).
-- Styling: plain CSS with design tokens (or Tailwind if it stays tidy). Keep the
-  v1 look: font Mukta, purple stamp colour #5A3EA6, green paid, red overdue,
-  light and dark mode.
+- Styling: plain CSS with design tokens in `src/web/styles.css`. Look (owner's request,
+  2026-11-20: "ultra modern", use the logo): the school logo (`public/logo-*.png`,
+  `logo-256.webp`) in the sidebar, sign-in screen, receipts and as the app icon; brand blue
+  from the logo, navy sidebar, glass top bar, floating bottom bar on phones; fonts Plus
+  Jakarta Sans with Mukta for Hindi; green paid, red overdue; light and dark mode.
+- Charts: small SVG components in `src/web/components/charts.tsx` (no chart library). Series
+  colours are the validated data-viz palette; every chart has a legend and a table view.
 - Tests: Vitest; API tests with `@cloudflare/vitest-pool-workers` against a local D1.
 - Lint/format: ESLint + Prettier. CI: GitHub Actions runs typecheck, lint, tests on
   every pull request.

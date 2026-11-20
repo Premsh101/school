@@ -4,7 +4,7 @@ import { formatDate } from '../../../shared/dates';
 import { amountInWords, MODE_LABELS } from '../../../shared/fees';
 import type { ReceiptDetail } from '../../../shared/fees-api';
 import { api } from '../../app/api';
-import { useBoot } from '../../app/boot';
+import { schoolLogo, useBoot } from '../../app/boot';
 import { t } from '../../app/i18n';
 import { Button, ErrorNote, Loading, PageHead, useToast } from '../../components/ui';
 import { classLabel, inr } from './shared';
@@ -64,7 +64,7 @@ export function ReceiptPage() {
       </div>
       <article className={`receipt ${cancelled ? 'cancelled' : ''}`}>
         <header>
-          {d.school.logo && <img src={d.school.logo} alt="" width={48} height={48} />}
+          <img src={schoolLogo(d.school.logo)} alt="" width={56} height={56} />
           <div>
             <strong className="receipt-school">{d.school.name}</strong>
             <span>

@@ -77,10 +77,13 @@ All of these live in one pure module, `src/shared/fees.ts`, with unit tests in
 
 ## Screens
 
-- **Fees** (dashboard): collected vs total, overdue now, due later, discounts; today /
-  last 7 days / this month; last 14 days and by month; payment modes; branches compared;
-  class-wise position; largest dues with phone; latest receipts. Admin can look at all
-  branches or one.
+- **Fees** (dashboard): filters for period (today, 7 days, 30 days, this month, session,
+  custom dates), school, class and payment mode, kept in the page address. Cards for
+  collected (with change against the previous period and a trend line), collection rate,
+  overdue now, due later and discounts. Charts: daily collection, payment modes, collected
+  against due by month, where the year stands, class-wise position, schools compared. Lists
+  of the largest dues (with phone numbers) and latest receipts. Every chart can switch to a
+  table.
 - **Collect fee:** search by name, father, roll or phone; with no search, the students
   overdue today, largest first.
 - **Student fee page:** summary, collect form (quick buttons Due today, One month, Full),
@@ -89,7 +92,7 @@ All of these live in one pure module, `src/shared/fees.ts`, with unit tests in
   student pays; totals and due at admission.
 - **Receipt:** narrow printable layout (thermal or A5) with the amount in words (Indian
   system), Send on WhatsApp and Copy text.
-- **Fee reports:** collection register, day-wise collection by mode, pending dues (due
+- **Reports** (on the shared Reports page): collection register, day-wise collection by mode, pending dues (due
   today or whole year, minimum amount), fee register, class-wise and branch-wise summary,
   discounts given, collected by staff member, cancelled receipts. Each has filters,
   "Download for Excel" (a CSV file) and Print.

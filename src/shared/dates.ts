@@ -76,3 +76,28 @@ export function parseLooseDate(input: string): string | null {
   const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   return isValidDate(iso) ? iso : null;
 }
+
+/** 2026-11-19 plus 3 days → 2026-11-22. Works on calendar dates only. */
+export function addDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/** 2026-11-09 → 9 Nov */
+export function shortDate(value: string): string {
+  return `${Number(value.slice(8, 10))} ${SHORT_MONTHS[Number(value.slice(5, 7)) - 1] ?? ''}`;
+}

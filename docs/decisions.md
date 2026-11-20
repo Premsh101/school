@@ -2,6 +2,33 @@
 
 Short, dated notes on technical choices. Newest first.
 
+## 2026-11-20 — New look, logo, dashboards and reports
+
+**Owner's request:** use the school logo, make the interface "ultra modern", and give the
+dashboard proper graphs, filters and reports.
+
+- **Logo.** The photo of the medal was cut out to a transparent circle and saved in the sizes
+  browsers and phones need (`public/`): favicon, home-screen icon, an Android maskable icon on
+  navy, and a 20 KB WebP for the app itself. It is the default logo everywhere; a logo
+  uploaded in Settings still replaces it.
+- **Look.** The v1 purple gave way to the blue of the logo, with a navy sidebar, a glass top
+  bar and a floating bottom bar on phones. Plus Jakarta Sans for Latin text, Mukta kept as the
+  fallback so Hindi still renders well. All colours remain tokens with light and dark sets.
+- **Charts without a library.** Five small SVG components (area, bars with a target, donut,
+  stacked bars, sparkline) instead of a chart package: about 10 KB instead of about 100 KB,
+  and they follow our tokens and dark mode exactly. Series colours are the validated
+  reference palette (blue, orange, aqua, yellow); checked with the palette validator, and
+  because aqua and yellow are faint on white, every chart shows a legend with values and can
+  switch to a table.
+- **Dashboard filters live in the address** (`/fees?period=month&mode=cash`), so a filtered
+  view can be bookmarked or sent. The money position is always as of today; the period only
+  decides which collections are counted.
+- **"Due by month"** counts students still studying; one-time charges fall in the first month.
+  Said under the chart.
+- **One Reports page** for every module. Each module lists its reports in its web manifest
+  (`reports`), so attendance and others can add theirs later. Student reports (list, class
+  strength, students who left) are new.
+
 ## 2026-11-20 — Three roles, school chosen at sign-in, shipped admin login
 
 **Owner's decisions:** roles are admin, management and accountant; there is sign-in only, no

@@ -161,10 +161,13 @@ export const fieldErrors = (error: unknown): Record<string, string> =>
 export function PageHead({
   title,
   back,
+  sub,
   children,
 }: {
   title: string;
   back?: string;
+  /** A short line under the title. */
+  sub?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -176,20 +179,29 @@ export function PageHead({
       )}
       <h1>{title}</h1>
       {children && <div className="actions no-print">{children}</div>}
+      {sub && <p className="sub">{sub}</p>}
     </div>
   );
 }
 
-export function Loading() {
+/** Grey placeholder blocks while data loads. */
+export function Loading({ rows = 3 }: { rows?: number }) {
   return (
-    <p className="empty" role="status">
-      {t('Loading…')}
-    </p>
+    <div className="skeleton" role="status" aria-label={t('Loading…')}>
+      {Array.from({ length: rows }, (_, i) => (
+        <span key={i} />
+      ))}
+    </div>
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <p className="empty">{children}</p>;
+export function Empty({ children, icon }: { children: ReactNode; icon?: string }) {
+  return (
+    <div className="empty">
+      {icon && <Icon name={icon} />}
+      <p>{children}</p>
+    </div>
+  );
 }
 
 export function Badge({
@@ -281,6 +293,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div aria-live="polite">{message && <div className="toast">{message}</div>}</div>
     </ToastContext.Provider>
   );
+}
+
+/** One of four soft colours, always the same for the same name. */
+export function avatarTone(name: string): string {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ['', 't1', 't2', 't3'][h % 4]!;
 }
 
 export function initials(name: string): string {

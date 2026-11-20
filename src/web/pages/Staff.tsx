@@ -13,6 +13,7 @@ import {
   Empty,
   ErrorNote,
   fieldErrors,
+  avatarTone,
   initials,
   Loading,
   PageHead,
@@ -65,7 +66,7 @@ export function StaffPage() {
                 disabled={!canEdit}
                 onClick={() => setEditing(s)}
               >
-                <span className="avatar" aria-hidden="true">
+                <span className={`avatar ${avatarTone(s.name)}`} aria-hidden="true">
                   {initials(s.name)}
                 </span>
                 <span className="grow">

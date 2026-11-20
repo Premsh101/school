@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../app/api';
-import { useBoot } from '../app/boot';
+import { schoolLogo, useBoot } from '../app/boot';
 import { t } from '../app/i18n';
 import {
   Button,
@@ -70,15 +70,13 @@ export function SettingsPage() {
         <div className="field">
           <label htmlFor="logo-file">{t('Logo')}</label>
           <div className="row">
-            {logo && (
-              <img
-                src={logo}
-                alt={t('Current logo')}
-                width={56}
-                height={56}
-                style={{ objectFit: 'contain', borderRadius: 8, background: '#fff' }}
-              />
-            )}
+            <img
+              src={schoolLogo(logo)}
+              alt={t('Current logo')}
+              width={56}
+              height={56}
+              style={{ objectFit: 'contain' }}
+            />
             <input
               id="logo-file"
               type="file"
@@ -97,7 +95,7 @@ export function SettingsPage() {
             />
             {logo && (
               <Button small onClick={() => setLogo('')}>
-                {t('Remove')}
+                {t('Use the standard logo')}
               </Button>
             )}
           </div>
