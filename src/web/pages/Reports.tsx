@@ -178,10 +178,12 @@ function ReportView({ group, report }: { group: Group; report: ReportDef }) {
     status: has('status') ? f.status : '',
   });
   // The report runs straight away with the default filters, and again on "Show report".
+  // It always follows the session chosen in the top bar, even for reports without a filter form.
   const [asked, setAsked] = useState(build);
+  const params = { ...asked, session_id: boot.session?.id };
   const result = useQuery({
-    queryKey: ['report', group.id, report.id, asked],
-    queryFn: () => api.get<ReportResult>(`${group.endpoint}/${report.id}${query(asked)}`),
+    queryKey: ['report', group.id, report.id, params],
+    queryFn: () => api.get<ReportResult>(`${group.endpoint}/${report.id}${query(params)}`),
   });
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<{ key: string; dir: 1 | -1 } | null>(null);
