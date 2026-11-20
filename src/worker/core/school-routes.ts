@@ -19,29 +19,66 @@ export const schoolRoutes = new Hono<AppEnv>();
 
 const isUniqueError = (e: unknown) => e instanceof Error && /UNIQUE constraint/i.test(e.message);
 
+/**
+ * Numbers for the Home dashboard, for the session chosen in the top bar (the current one if
+ * none is given). Counts are only for people who may see the lists they summarise.
+ */
 schoolRoutes.get('/home', async (c) => {
   const db = c.env.DB;
   const user = c.get('user');
-  // Counts are only for people who may see the lists they summarise.
   const seeStudents = can(user.role, 'students.view');
   const seeStaff = can(user.role, 'staff.view');
-  const [students, staff] = await db.batch([
+  const sessionId = Number(c.req.query('session_id')) || null;
+  const [groups, staff] = await db.batch([
     db
       .prepare(
-        `SELECT e.branch_id, COUNT(*) AS count FROM enrolments e
-          JOIN academic_sessions s ON s.id = e.session_id AND s.is_current = 1
-         WHERE e.status = 'studying' AND ?1 = 1 ${scopeSql(user, 'e.branch_id')} GROUP BY e.branch_id`,
+        `SELECT e.branch_id, e.class_id, e.admission_type, e.status, s.gender, COUNT(*) AS n
+           FROM enrolments e JOIN students s ON s.id = e.student_id
+          WHERE e.session_id = COALESCE(?1, (SELECT id FROM academic_sessions WHERE is_current = 1))
+            AND ?2 = 1 ${scopeSql(user, 'e.branch_id')}
+          GROUP BY e.branch_id, e.class_id, e.admission_type, e.status, s.gender`,
       )
-      .bind(seeStudents ? 1 : 0),
+      .bind(sessionId, seeStudents ? 1 : 0),
     db
       .prepare(
         `SELECT branch_id, COUNT(*) AS count FROM staff WHERE active = 1 AND ?1 = 1 ${scopeSql(user, 'branch_id')} GROUP BY branch_id`,
       )
       .bind(seeStaff ? 1 : 0),
   ]);
+  const rows = groups!.results as {
+    branch_id: number;
+    class_id: number;
+    admission_type: 'new' | 'old';
+    status: 'studying' | 'left';
+    gender: string;
+    n: number;
+  }[];
+  const byBranch = new Map<number, number>();
+  const byClass = new Map<number, HomeSummary['by_class'][number]>();
+  let newAdmissions = 0;
+  let oldStudents = 0;
+  let left = 0;
+  for (const r of rows) {
+    if (r.status === 'left') {
+      left += r.n;
+      continue;
+    }
+    byBranch.set(r.branch_id, (byBranch.get(r.branch_id) ?? 0) + r.n);
+    const cls = byClass.get(r.class_id) ?? { class_id: r.class_id, count: 0, boys: 0, girls: 0 };
+    cls.count += r.n;
+    if (r.gender === 'male') cls.boys += r.n;
+    if (r.gender === 'female') cls.girls += r.n;
+    byClass.set(r.class_id, cls);
+    if (r.admission_type === 'new') newAdmissions += r.n;
+    else oldStudents += r.n;
+  }
   return c.json<HomeSummary>({
-    students: students!.results as HomeSummary['students'],
+    students: [...byBranch].map(([branch_id, count]) => ({ branch_id, count })),
     staff: staff!.results as HomeSummary['staff'],
+    by_class: [...byClass.values()],
+    new_admissions: newAdmissions,
+    old_students: oldStudents,
+    left,
   });
 });
 

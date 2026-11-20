@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { sessionMonths, todayIST } from '../../../shared/dates';
+import { isValidDate, sessionMonths, todayIST } from '../../../shared/dates';
 import {
   allocate,
   CHARGE_LABELS,
@@ -8,6 +8,7 @@ import {
   feePosition,
   FEE_KEYS,
   MODE_LABELS,
+  PAYMENT_MODES,
   monthsStarted,
   planTotals,
   quickAmounts,
@@ -532,11 +533,19 @@ routes.post('/receipts/:id/cancel', requirePermission('fees.cancel'), async (c) 
 const addDays = (date: string, days: number) =>
   new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
+/**
+ * The fee dashboard. Filters: school, class, payment mode and a date range. The money
+ * position (to pay, collected, pending, overdue) is always as of today; the date range
+ * decides which collections are counted in the range figures and the daily chart.
+ */
 routes.get('/dashboard', requirePermission('fees.view'), async (c) => {
   const db = c.env.DB;
   const user = c.get('user');
-  const sessionId = Number(c.req.query('session_id')) || 0;
-  const branchId = Number(c.req.query('branch_id')) || null;
+  const q = c.req.query();
+  const sessionId = Number(q.session_id) || 0;
+  const branchId = Number(q.branch_id) || null;
+  const classId = Number(q.class_id) || null;
+  const mode = PAYMENT_MODES.find((m) => m === q.mode) ?? null;
   if (branchId) assertBranch(user, branchId);
   const session = await db
     .prepare('SELECT start_year, start_month FROM academic_sessions WHERE id = ?')
@@ -544,45 +553,67 @@ routes.get('/dashboard', requirePermission('fees.view'), async (c) => {
     .first<{ start_year: number; start_month: number }>();
   if (!session) throw notFound('Session');
   const today = todayIST();
+  const sessionStart = `${session.start_year}-${String(session.start_month).padStart(2, '0')}-01`;
+  const from = q.from && isValidDate(q.from) ? q.from : sessionStart;
+  const to = q.to && isValidDate(q.to) ? q.to : today;
+  if (from > to) throw new AppError(400, 'The "from" date is after the "to" date. Swap them.');
+  const rangeDays =
+    Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+  if (rangeDays > 400) throw new AppError(400, 'Choose a date range of at most one year.');
+
   const pos = positionSql(monthsStarted(session, today));
   const sums = `COUNT(*) AS students, SUM(${pos.fee}) AS fee, SUM(${pos.discount}) AS discount, SUM(${pos.net}) AS net, SUM(${pos.paid}) AS paid,
     SUM(${pos.counter_discount}) AS counter_discount, SUM(${pos.pending}) AS pending, SUM(${pos.overdue}) AS overdue`;
-  const where = `WHERE e.session_id = ?1 AND (?2 IS NULL OR e.branch_id = ?2) ${scopeSql(user, 'e.branch_id')}`;
-  const receiptWhere = `WHERE r.session_id = ?1 AND (?2 IS NULL OR r.branch_id = ?2) ${scopeSql(user, 'r.branch_id')}`;
-  const [byBranch, byClass, missing, byDay, largest, latest] = await db.batch([
+  const where = `WHERE e.session_id = ?1 AND (?2 IS NULL OR e.branch_id = ?2) AND (?3 IS NULL OR e.class_id = ?3) ${scopeSql(user, 'e.branch_id')}`;
+  const receiptWhere = `WHERE r.session_id = ?1 AND (?2 IS NULL OR r.branch_id = ?2)
+    AND (?3 IS NULL OR r.enrolment_id IN (SELECT id FROM enrolments WHERE class_id = ?3))
+    AND (?4 IS NULL OR r.mode = ?4) ${scopeSql(user, 'r.branch_id')}`;
+  const studentArgs = [sessionId, branchId, classId];
+  const receiptArgs = [sessionId, branchId, classId, mode];
+  const monthCols = Array.from(
+    { length: 12 },
+    (_, i) => `SUM(CASE WHEN f.months >= ${i + 1} THEN f.monthly_net ELSE 0 END) AS m${i + 1}`,
+  ).join(', ');
+  const [byBranch, byClass, missing, byDay, largest, latest, dueRow] = await db.batch([
     db
       .prepare(
         `SELECT e.branch_id, ${sums} FROM enrolments e LEFT JOIN student_fees f ON f.enrolment_id = e.id ${where} GROUP BY e.branch_id`,
       )
-      .bind(sessionId, branchId),
+      .bind(...studentArgs),
     db
       .prepare(
         `SELECT e.class_id, ${sums} FROM enrolments e LEFT JOIN student_fees f ON f.enrolment_id = e.id ${where} GROUP BY e.class_id`,
       )
-      .bind(sessionId, branchId),
+      .bind(...studentArgs),
     db
       .prepare(
         `SELECT COUNT(*) AS n FROM enrolments e LEFT JOIN student_fees f ON f.enrolment_id = e.id ${where} AND f.enrolment_id IS NULL`,
       )
-      .bind(sessionId, branchId),
+      .bind(...studentArgs),
     db
       .prepare(
         `SELECT r.date, r.mode, SUM(r.amount) AS amount, COUNT(*) AS receipts FROM receipts r ${receiptWhere} AND r.cancelled_at IS NULL GROUP BY r.date, r.mode`,
       )
-      .bind(sessionId, branchId),
+      .bind(...receiptArgs),
     db
       .prepare(
         `SELECT e.id AS enrolment_id, s.id AS student_id, s.name, s.father_name, s.phone, s.phone2, e.branch_id, e.class_id,
                 sec.name AS section_name, e.roll_no, e.status, ${pos.pending} AS pending, ${pos.overdue} AS overdue
          ${STUDENT_JOINS} ${where} AND ${pos.overdue} > 0 ORDER BY overdue DESC LIMIT 10`,
       )
-      .bind(sessionId, branchId),
+      .bind(...studentArgs),
     db
       .prepare(
         `SELECT r.id, r.receipt_no, r.date, s.name, r.amount, r.mode, r.cancelled_at IS NOT NULL AS cancelled
            FROM receipts r JOIN students s ON s.id = r.student_id ${receiptWhere} ORDER BY r.id DESC LIMIT 10`,
       )
-      .bind(sessionId, branchId),
+      .bind(...receiptArgs),
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(f.one_time_net), 0) AS one_time, ${monthCols}
+           FROM enrolments e JOIN student_fees f ON f.enrolment_id = e.id ${where} AND e.status = 'studying'`,
+      )
+      .bind(...studentArgs),
   ]);
   const branchRows = byBranch!.results as FeesDashboard['by_branch'];
   const total: MoneySums = {
@@ -606,12 +637,16 @@ routes.get('/dashboard', requirePermission('fees.view'), async (c) => {
   }[];
   const sumWhere = (test: (date: string) => boolean) =>
     days.filter((d) => test(d.date)).reduce((sum, d) => sum + d.amount, 0);
+  const inRange = (d: string) => d >= from && d <= to;
   const weekAgo = addDays(today, -6);
   const modes = new Map<PaymentMode, { amount: number; receipts: number }>();
-  for (const d of days) {
+  for (const d of days.filter((x) => inRange(x.date))) {
     const m = modes.get(d.mode) ?? { amount: 0, receipts: 0 };
     modes.set(d.mode, { amount: m.amount + d.amount, receipts: m.receipts + d.receipts });
   }
+  const prevTo = addDays(from, -1);
+  const prevFrom = addDays(from, -rangeDays);
+  const due = (dueRow!.results[0] ?? {}) as Record<string, number | null>;
   return c.json<FeesDashboard>({
     total,
     missing_fees: (missing!.results[0] as { n: number }).n,
@@ -620,16 +655,29 @@ routes.get('/dashboard', requirePermission('fees.view'), async (c) => {
     today: sumWhere((d) => d === today),
     last_7_days: sumWhere((d) => d >= weekAgo && d <= today),
     this_month: sumWhere((d) => d.slice(0, 7) === today.slice(0, 7)),
-    by_month: sessionMonths(session.start_year, session.start_month).map(({ year, month }) => ({
+    by_month: sessionMonths(session.start_year, session.start_month).map(({ year, month }, i) => ({
       year,
       month,
       amount: sumWhere((d) => d.slice(0, 7) === `${year}-${String(month).padStart(2, '0')}`),
+      due: (i === 0 ? Number(due.one_time ?? 0) : 0) + Number(due[`m${i + 1}`] ?? 0),
     })),
     last_14_days: Array.from({ length: 14 }, (_, i) => addDays(today, i - 13)).map((date) => ({
       date,
       amount: sumWhere((d) => d === date),
     })),
-    by_mode: [...modes.entries()].map(([mode, m]) => ({ mode, ...m })),
+    range: {
+      from,
+      to,
+      collected: sumWhere(inRange),
+      receipts: days.filter((d) => inRange(d.date)).reduce((n, d) => n + d.receipts, 0),
+      previous_collected:
+        prevFrom >= sessionStart ? sumWhere((d) => d >= prevFrom && d <= prevTo) : null,
+      days: Array.from({ length: rangeDays }, (_, i) => addDays(from, i)).map((date) => ({
+        date,
+        amount: sumWhere((d) => d === date),
+      })),
+    },
+    by_mode: [...modes.entries()].map(([m, v]) => ({ mode: m, ...v })),
     largest_dues: largest!.results as FeesDashboard['largest_dues'],
     latest_receipts: latest!.results as FeesDashboard['latest_receipts'],
   });

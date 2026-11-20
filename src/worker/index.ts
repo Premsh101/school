@@ -7,6 +7,7 @@ import { AppError } from './core/errors';
 import { importRoutes } from './core/import-routes';
 import { platformRoutes, restoreRoutes } from './core/platform-routes';
 import { promotionRoutes } from './core/promotion-routes';
+import { reportRoutes } from './core/reports-routes';
 import { schoolRoutes } from './core/school-routes';
 import { staffRoutes } from './core/staff-routes';
 import { studentRoutes } from './core/students-routes';
@@ -36,6 +37,7 @@ secured.route('/', studentRoutes);
 secured.route('/', promotionRoutes);
 secured.route('/', staffRoutes);
 secured.route('/', platformRoutes);
+secured.route('/', reportRoutes);
 
 for (const mod of modules) {
   for (const [role, permissions] of Object.entries(mod.rolePermissions)) {
