@@ -120,6 +120,7 @@ export function AccountPage() {
           {t('Change password')}
         </Button>
       </form>
+      <ErrorNote error={logout.error} />
       <Button variant="danger" block busy={logout.isPending} onClick={() => logout.mutate()}>
         {t('Sign out')}
       </Button>

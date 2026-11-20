@@ -181,6 +181,7 @@ export function NewPasswordPage({
         <Button type="submit" variant="primary" block busy={save.isPending}>
           {t('Save and continue')}
         </Button>
+        <ErrorNote error={logout.error} />
         <Button block busy={logout.isPending} onClick={() => logout.mutate()}>
           {t('Sign out')}
         </Button>

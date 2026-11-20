@@ -35,7 +35,7 @@ export function Layout() {
     },
     onError: (e) => toast(e instanceof Error ? e.message : t('Could not change school')),
   });
-  const signOut = useSignOut();
+  const signOut = useSignOut(toast);
   const items = navItems(boot.can, boot.modules);
   const tabs = items.filter((i) => i.group === 'main').slice(0, 4);
   const groups = (['main', 'school', 'admin', 'me'] as const).map((g) => ({

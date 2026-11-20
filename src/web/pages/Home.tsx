@@ -10,7 +10,7 @@ import { GROUP_TITLES, navItems } from '../app/nav';
 import { BarChart, ChartCard, Donut } from '../components/charts';
 import { Kpi } from '../components/dash';
 import { Icon } from '../components/icons';
-import { ErrorNote } from '../components/ui';
+import { ErrorNote, useToast } from '../components/ui';
 import { webModules } from '../modules';
 
 const count = (n: number) => n.toLocaleString('en-IN');
@@ -229,7 +229,8 @@ function ShortcutGrid() {
 /** The full menu, for phones where the bottom bar only fits a few entries. */
 export function MorePage() {
   const boot = useBoot();
-  const signOut = useSignOut();
+  const toast = useToast();
+  const signOut = useSignOut(toast);
   const items = navItems(boot.can, boot.modules);
   return (
     <div className="stack">
