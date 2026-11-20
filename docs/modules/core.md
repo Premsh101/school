@@ -62,7 +62,10 @@ what a person cannot use.
 Setup · Sign in · Home · Students (search and filters) · Add / edit student · Student page
 with class history · Import students · Promote to next session · Staff · Classes and
 sections (with subjects) · Logins · Branches · Sessions · Settings · Activity log · Backup ·
-My account (password, light/dark, sign out) · More (full menu on phones).
+My account (password, light/dark, sign out) · More (full menu on phones) · Home dashboard
+(students, staff, new and old, left, students by class, and the fee snapshot) · Reports
+(student list, class strength, students who left, plus every module's reports, with filters,
+search, sorting, totals, Excel download and print).
 
 ## API (all under `/api`)
 

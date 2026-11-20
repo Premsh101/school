@@ -25,6 +25,13 @@ export function navItems(
     },
     { to: '/staff', label: t('Staff'), icon: 'staff', permission: 'staff.view', group: 'main' },
     {
+      to: '/reports',
+      label: t('Reports'),
+      icon: 'report',
+      permission: 'students.view',
+      group: 'main',
+    },
+    {
       to: '/students/import',
       label: t('Import students'),
       icon: 'upload',

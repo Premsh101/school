@@ -17,6 +17,7 @@ import { HomePage, MorePage } from './pages/Home';
 import { ImportPage } from './pages/Import';
 import { LoginPage, NewPasswordPage } from './pages/Login';
 import { PromotionPage } from './pages/Promotion';
+import { ReportsPage } from './pages/Reports';
 import { SessionsPage } from './pages/Sessions';
 import { SettingsPage } from './pages/Settings';
 import { StaffPage } from './pages/Staff';
@@ -72,7 +73,8 @@ function App() {
   if (boot.data.needs_setup) return <UnfinishedRestorePage />;
   if (!boot.data.user)
     return <LoginPage school={boot.data.school} branches={boot.data.login_branches} />;
-  if (boot.data.user.must_change_password) return <NewPasswordPage name={boot.data.user.name} />;
+  if (boot.data.user.must_change_password)
+    return <NewPasswordPage name={boot.data.user.name} school={boot.data.school} />;
 
   const page = (permission: string | undefined, element: React.ReactNode) => (
     <Guard permission={permission}>{element}</Guard>
@@ -89,6 +91,7 @@ function App() {
           <Route path="students/:id" element={page('students.view', <StudentDetailPage />)} />
           <Route path="students/:id/edit" element={page('students.edit', <StudentFormPage />)} />
           <Route path="promotion" element={page('students.promote', <PromotionPage />)} />
+          <Route path="reports" element={page('students.view', <ReportsPage />)} />
           <Route path="staff" element={page('staff.view', <StaffPage />)} />
           <Route path="classes" element={page('structure.edit', <ClassesPage />)} />
           <Route path="users" element={page('users.manage', <UsersPage />)} />

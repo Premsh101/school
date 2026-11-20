@@ -32,7 +32,7 @@ const insert = (table, row) =>
 let seed = 42;
 const rnd = (n) => {
   seed = (seed * 1103515245 + 12345) % 2147483648;
-  return seed % n;
+  return Math.floor(seed / 65536) % n;
 };
 const pick = (list) => list[rnd(list.length)];
 

@@ -1,143 +1,46 @@
 /* Fees module styles. Colours come from the tokens in src/web/styles.css. */
 .stats {
   display: grid;
-  gap: 12px 16px;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 .stat {
   display: grid;
-  gap: 1px;
+  gap: 2px;
   align-content: start;
-  padding-left: 10px;
-  border-left: 4px solid var(--line);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
 }
 .stat.paid {
-  border-left-color: var(--paid);
+  background: var(--paid-soft);
+  border-color: transparent;
 }
 .stat.overdue {
-  border-left-color: var(--overdue);
+  background: var(--overdue-soft);
+  border-color: transparent;
 }
 .stat-label {
-  font-size: 0.88rem;
+  font-size: 0.8rem;
+  font-weight: 700;
   color: var(--muted);
 }
 .stat-value {
-  font-size: 1.35rem;
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
-.overdue-text {
+.stat.paid .stat-value {
+  color: var(--paid);
+}
+.stat.overdue .stat-value {
   color: var(--overdue);
 }
-.meter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.meter-track {
-  flex: 1;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--line);
-  overflow: hidden;
-}
-.meter-fill {
-  height: 100%;
-  border-radius: 0 4px 4px 0;
-  background: var(--stamp);
-}
-.chart-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 4px 0 -4px;
-}
-.bars {
-  margin: 0;
-}
-.bars-plot {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 120px;
-  padding-top: 22px;
-  border-bottom: 1px solid var(--line);
-}
-.bars-col {
-  position: relative;
-  flex: 1;
-  height: 100%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  min-width: 0;
-}
-.bars-bar {
-  width: 100%;
-  max-width: 28px;
-  border-radius: 4px 4px 0 0;
-  background: var(--stamp);
-}
-.bars-col:hover .bars-bar,
-.bars-col:focus-visible .bars-bar {
-  opacity: 0.75;
-}
-.bars-peak {
-  position: absolute;
-  top: -20px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.78rem;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.bars-tip {
-  display: none;
-  position: absolute;
-  top: -22px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--bg);
-  font-size: 0.8rem;
-  line-height: 1.25;
-  text-align: center;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.bars-col:nth-child(-n + 3) .bars-tip,
-.bars-col:nth-child(-n + 3) .bars-peak {
-  left: 0;
-  transform: none;
-}
-.bars-col:nth-last-child(-n + 3) .bars-tip,
-.bars-col:nth-last-child(-n + 3) .bars-peak {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-.bars-col:hover .bars-tip,
-.bars-col:focus-visible .bars-tip {
-  display: block;
-}
-.bars-col:hover .bars-peak,
-.bars-col:focus-visible .bars-peak {
-  visibility: hidden;
-}
-.bars-axis {
-  display: flex;
-  gap: 2px;
-  margin-top: 2px;
-}
-.bars-axis span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-align: center;
-  font-size: 0.72rem;
-  color: var(--muted);
+.overdue-text {
+  color: var(--overdue);
 }
 .months {
   display: grid;
@@ -155,8 +58,8 @@
   align-content: start;
   padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
+  border-radius: 12px;
+  background: var(--surface);
   font-size: 0.82rem;
   line-height: 1.25;
 }
@@ -186,9 +89,9 @@
   font-size: 1.4rem;
 }
 .btn[aria-pressed='true'] {
-  border-color: var(--stamp);
-  background: var(--stamp-soft);
-  color: var(--stamp);
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 .fee-all {
   display: grid;

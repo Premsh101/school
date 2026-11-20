@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../app/api';
+import { schoolLogo } from '../app/boot';
 import { t } from '../app/i18n';
 import { Button, ErrorNote, fieldErrors, SelectField, TextField } from '../components/ui';
 
@@ -55,7 +56,7 @@ export function LoginPage({
     },
   });
   return (
-    <div className="center-page">
+    <AuthShell school={school} schools={branches.map((b) => b.name)}>
       <form
         className="card stack"
         onSubmit={(e) => {
@@ -63,19 +64,10 @@ export function LoginPage({
           login.mutate();
         }}
       >
-        {school.logo && (
-          <img
-            src={school.logo}
-            alt=""
-            width={72}
-            height={72}
-            style={{ margin: '0 auto', objectFit: 'contain' }}
-          />
-        )}
-        <h1 className="stamp-title">{school.name || t('School')}</h1>
-        <p className="muted" style={{ textAlign: 'center' }}>
-          {t('Sign in to continue')}
-        </p>
+        <div>
+          <h2 style={{ fontSize: '1.35rem' }}>{t('Sign in')}</h2>
+          <p className="muted small">{t('Choose your school, then enter your login.')}</p>
+        </div>
         <SelectField
           label={t('School')}
           value={branch}
@@ -115,12 +107,18 @@ export function LoginPage({
           )}
         </p>
       </form>
-    </div>
+    </AuthShell>
   );
 }
 
 /** First sign-in with a password someone else chose: the person must set their own. */
-export function NewPasswordPage({ name }: { name: string }) {
+export function NewPasswordPage({
+  name,
+  school,
+}: {
+  name: string;
+  school: { name: string; logo: string };
+}) {
   const client = useQueryClient();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -142,7 +140,7 @@ export function NewPasswordPage({ name }: { name: string }) {
   });
   const err = fieldErrors(save.error);
   return (
-    <div className="center-page">
+    <AuthShell school={school} schools={[]}>
       <form
         className="card stack"
         onSubmit={(e) => {
@@ -150,7 +148,7 @@ export function NewPasswordPage({ name }: { name: string }) {
           save.mutate();
         }}
       >
-        <h1 className="stamp-title">{t('Set your own password')}</h1>
+        <h2 style={{ fontSize: '1.35rem' }}>{t('Set your own password')}</h2>
         <p className="muted">
           {t(
             'Welcome, {name}. You signed in with a password given to you. Choose your own now; only you will know it.',
@@ -192,6 +190,35 @@ export function NewPasswordPage({ name }: { name: string }) {
           {t('Sign out')}
         </Button>
       </form>
+    </AuthShell>
+  );
+}
+
+/** The sign-in screens: school logo and name on a navy panel, the form beside or below it. */
+function AuthShell({
+  school,
+  schools,
+  children,
+}: {
+  school: { name: string; logo: string };
+  schools: string[];
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="auth">
+      <section className="auth-brand">
+        <img src={schoolLogo(school.logo)} alt="" width={220} height={220} />
+        <h1>{school.name || t('School')}</h1>
+        <p>{t('Students, fees and reports for every school, on your phone.')}</p>
+        {schools.length > 0 && (
+          <div className="schools">
+            {schools.map((name) => (
+              <span key={name}>{name}</span>
+            ))}
+          </div>
+        )}
+      </section>
+      <div className="auth-form">{children}</div>
     </div>
   );
 }

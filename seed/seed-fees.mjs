@@ -27,7 +27,7 @@ async function call(method, path, body) {
 let seed = 7;
 const rnd = (n) => {
   seed = (seed * 1103515245 + 12345) % 2147483648;
-  return seed % n;
+  return Math.floor(seed / 65536) % n;
 };
 const pad = (n) => String(n).padStart(2, '0');
 

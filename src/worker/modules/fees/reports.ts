@@ -90,7 +90,7 @@ export async function runReport(
         col('name', 'Student'),
         col('father_name', 'Father'),
         col('class', 'Class'),
-        col('branch', 'Branch'),
+        col('branch', 'School'),
         col('mode', 'Mode'),
         col('reference', 'Reference'),
         col('amount', 'Amount', 'money'),
@@ -188,7 +188,7 @@ export async function runReport(
       args = studentArgs;
       break;
     case 'branchwise':
-      columns = [col('branch', 'Branch'), ...sumColumns];
+      columns = [col('branch', 'School'), ...sumColumns];
       sql = `SELECT b.name AS branch, ${sums} ${STUDENT_JOINS} JOIN branches b ON b.id = e.branch_id ${studentWhere} GROUP BY b.id ORDER BY b.id`;
       args = studentArgs;
       break;

@@ -11,6 +11,7 @@ import {
   Badge,
   Empty,
   ErrorNote,
+  avatarTone,
   initials,
   Loading,
   PageHead,
@@ -82,7 +83,7 @@ export function CollectPage() {
             {list.data.rows.map((s) => (
               <li key={s.enrolment_id}>
                 <Link to={`/fees/student/${s.enrolment_id}`} className="item">
-                  <span className="avatar" aria-hidden="true">
+                  <span className={`avatar ${avatarTone(s.name)}`} aria-hidden="true">
                     {initials(s.name)}
                   </span>
                   <span className="grow">

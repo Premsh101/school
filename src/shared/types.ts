@@ -178,8 +178,15 @@ export interface PromotionResult {
   skipped: number;
 }
 export interface HomeSummary {
+  /** Students studying in the session, per school. */
   students: { branch_id: number; count: number }[];
   staff: { branch_id: number; count: number }[];
+  /** Students studying, per class, with boys and girls. */
+  by_class: { class_id: number; count: number; boys: number; girls: number }[];
+  new_admissions: number;
+  old_students: number;
+  /** Marked as left during the session. */
+  left: number;
 }
 export interface ApiError {
   error: string;

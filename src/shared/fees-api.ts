@@ -1,4 +1,5 @@
 import type { Allocation, FeeAmounts, FeePlan, FeePosition, PaymentMode } from './fees';
+import type { ReportDef } from './reports';
 
 // Shapes of the fees API answers, shared by the Worker and the web app.
 
@@ -104,9 +105,23 @@ export interface FeesDashboard {
   today: number;
   last_7_days: number;
   this_month: number;
-  /** One entry per month of the session. */
-  by_month: { year: number; month: number; amount: number }[];
+  /**
+   * One entry per month of the session: money collected in that month, and the fees falling
+   * due that month for students still studying (one-time charges fall in the first month).
+   */
+  by_month: { year: number; month: number; amount: number; due: number }[];
+  /** Collection in the chosen date range (filters: date range, class, payment mode). */
+  range: {
+    from: string;
+    to: string;
+    collected: number;
+    receipts: number;
+    /** The same number of days just before the range, or null if that is before the session. */
+    previous_collected: number | null;
+    days: { date: string; amount: number }[];
+  };
   last_14_days: { date: string; amount: number }[];
+  /** Payment modes within the chosen date range. */
   by_mode: { mode: PaymentMode; amount: number; receipts: number }[];
   largest_dues: (CollectRow & { phone2: string })[];
   latest_receipts: {
@@ -120,29 +135,62 @@ export interface FeesDashboard {
   }[];
 }
 
-export type ReportColumnKind = 'text' | 'money' | 'number' | 'date';
-export interface ReportColumn {
-  key: string;
-  label: string;
-  kind: ReportColumnKind;
-}
-export interface ReportResult {
-  title: string;
-  columns: ReportColumn[];
-  rows: Record<string, string | number | null>[];
-  /** True when there were more rows than the limit; narrow the filters to see the rest. */
-  truncated: boolean;
-}
+export type { ReportColumn, ReportColumnKind, ReportResult } from './reports';
 
 export const REPORTS = [
-  { id: 'collection', name: 'Collection register', filters: ['dates', 'branch', 'class', 'mode'] },
-  { id: 'daywise', name: 'Day-wise collection by mode', filters: ['dates', 'branch'] },
-  { id: 'pending', name: 'Pending dues', filters: ['basis', 'min', 'branch', 'class', 'section'] },
-  { id: 'register', name: 'Fee register', filters: ['branch', 'class', 'section'] },
-  { id: 'classwise', name: 'Class-wise summary', filters: ['branch'] },
-  { id: 'branchwise', name: 'Branch-wise summary', filters: [] },
-  { id: 'discounts', name: 'Discounts given', filters: ['branch', 'class'] },
-  { id: 'staff', name: 'Collected by staff member', filters: ['dates', 'branch'] },
-  { id: 'cancelled', name: 'Cancelled receipts', filters: ['dates', 'branch'] },
-] as const;
+  {
+    id: 'collection',
+    name: 'Collection register',
+    description: 'Every receipt in a date range, with mode, reference and who collected it.',
+    filters: ['dates', 'branch', 'class', 'mode'],
+  },
+  {
+    id: 'daywise',
+    name: 'Day-wise collection',
+    description: 'Cash, UPI, bank and cheque totals for each day: the daily cash tally.',
+    filters: ['dates', 'branch'],
+  },
+  {
+    id: 'pending',
+    name: 'Pending dues',
+    description: 'Who owes how much, due today or for the whole year, with phone numbers.',
+    filters: ['basis', 'min', 'branch', 'class', 'section'],
+  },
+  {
+    id: 'register',
+    name: 'Fee register',
+    description: 'One line per student: fee, discount, paid, pending and overdue.',
+    filters: ['branch', 'class', 'section'],
+  },
+  {
+    id: 'classwise',
+    name: 'Class-wise summary',
+    description: 'Fee totals for each class: to pay, collected, pending and overdue.',
+    filters: ['branch'],
+  },
+  {
+    id: 'branchwise',
+    name: 'School-wise summary',
+    description: 'Fee totals for each school, side by side.',
+    filters: [],
+  },
+  {
+    id: 'discounts',
+    name: 'Discounts given',
+    description: 'Every discount by fee type with its reason, plus discounts given at the counter.',
+    filters: ['branch', 'class'],
+  },
+  {
+    id: 'staff',
+    name: 'Collected by staff',
+    description: 'How much each person collected, split by payment mode.',
+    filters: ['dates', 'branch'],
+  },
+  {
+    id: 'cancelled',
+    name: 'Cancelled receipts',
+    description: 'Receipts that were cancelled, who cancelled them and why.',
+    filters: ['dates', 'branch'],
+  },
+] as const satisfies readonly ReportDef[];
 export type ReportId = (typeof REPORTS)[number]['id'];

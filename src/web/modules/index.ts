@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { ReportDef } from '../../shared/reports';
 import { feesWebModule } from './fees';
 
 /**
@@ -25,6 +26,14 @@ export interface WebModule {
   studentLinks?: { to: (enrolmentId: number) => string; label: string; permission?: string }[];
   /** Cards shown on the home page. */
   dashboardWidgets: { id: string; component: ComponentType; permission?: string }[];
+  /** Reports shown on the Reports page, fetched from `${endpoint}/:id`. */
+  reports?: {
+    title: string;
+    endpoint: string;
+    permission: string;
+    icon: string;
+    list: readonly ReportDef[];
+  };
 }
 
 /** Add modules here as they are built. */
