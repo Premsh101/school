@@ -39,17 +39,20 @@ describe('the school that comes with the first release', () => {
     expect(await count('sections')).toBe(30);
   });
 
-  it('loads the first admin login, with only a hash of its password', async () => {
+  it('loads the admin and management logins, with only a hash of their passwords', async () => {
     const users = await env.DB.prepare(
-      'SELECT username, name, role, active, must_change_password, password_hash FROM users',
+      'SELECT username, name, role, active, must_change_password, password_hash FROM users ORDER BY id',
     ).all<{
       username: string;
       role: string;
       must_change_password: number;
       password_hash: string;
     }>();
-    expect(users.results).toHaveLength(1);
-    const admin = users.results[0]!;
+    expect(users.results).toHaveLength(2);
+    const [admin, manager] = users.results as [
+      (typeof users.results)[0],
+      (typeof users.results)[0],
+    ];
     expect(admin).toMatchObject({
       username: 'admin@sps.com',
       role: 'admin',
@@ -57,6 +60,13 @@ describe('the school that comes with the first release', () => {
     });
     expect(admin.password_hash).not.toContain('admin@123');
     expect(await verifyPassword('admin@123', admin.password_hash)).toBe(true);
+    expect(manager).toMatchObject({
+      username: 'manager@sps.com',
+      role: 'management',
+      must_change_password: 1,
+    });
+    expect(manager.password_hash).not.toContain('manager@123');
+    expect(await verifyPassword('manager@123', manager.password_hash)).toBe(true);
   });
 
   it('loads exactly the printed fee chart for both schools', async () => {
@@ -86,7 +96,7 @@ describe('the school that comes with the first release', () => {
       await count('sections'),
       await count('users'),
     ];
-    for (const query of env.TEST_SEED[0]!.queries) await env.DB.prepare(query).run();
+    for (const m of env.TEST_SEED) for (const query of m.queries) await env.DB.prepare(query).run();
     expect([
       await count('fee_rates'),
       await count('branches'),
@@ -135,6 +145,33 @@ describe('first sign-in', () => {
     const old = await new Client().post('/auth/login', { ...ADMIN, branch_id: null });
     expect(old.status).toBe(401);
     expect((await signIn(ADMIN.username, NEW_PASSWORD, 2)).cookie).toMatch(/^sid=/);
+  });
+
+  it('comes with the management login manager@sps.com / manager@123, which must set its own password', async () => {
+    expect(
+      (await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first<{ n: number }>())!.n,
+    ).toBe(2);
+    const manager = await signIn('manager@sps.com', 'manager@123', null);
+    const boot = (await manager.get('/bootstrap')).data;
+    expect(boot.user).toMatchObject({
+      role: 'management',
+      must_change_password: true,
+      all_schools: true,
+    });
+    expect((await manager.get('/students?session_id=1')).status).toBe(403);
+    const res = await manager.post('/auth/password', {
+      current_password: 'manager@123',
+      new_password: 'manager-own-pass-1',
+    });
+    expect(res.status).toBe(200);
+    expect((await manager.get('/students?session_id=1')).status).toBe(200);
+    expect((await manager.get('/users')).status).toBe(403);
+    const old = await new Client().post('/auth/login', {
+      username: 'manager@sps.com',
+      password: 'manager@123',
+      branch_id: null,
+    });
+    expect(old.status).toBe(401);
   });
 
   it('lets the admin create the other logins', async () => {

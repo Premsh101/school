@@ -48,11 +48,14 @@ sql.push(
 const LAST = "(SELECT id FROM academic_sessions WHERE name = '2025-26')";
 const THIS = "(SELECT id FROM academic_sessions WHERE name = '2026-27')";
 
-// The admin login admin@sps.com comes with migration 0003. For local demos it keeps the
-// password admin@123 and is not asked to change it. The other demo logins use demo12345.
-sql.push("UPDATE users SET must_change_password = 0 WHERE username = 'admin@sps.com';");
+// The admin login admin@sps.com (migration 0003) and the management login manager@sps.com
+// (migration 0004) come with the release. For local demos they keep the passwords admin@123
+// and manager@123 and are not asked to change them. The other demo logins use demo12345.
+sql.push(
+  "UPDATE users SET must_change_password = 0 WHERE username IN ('admin@sps.com', 'manager@sps.com');",
+);
+sql.push("UPDATE users SET name = 'Meena Sharma' WHERE username = 'manager@sps.com';");
 const users = [
-  { username: 'manager@sps.com', name: 'Meena Sharma', role: 'management', branches: [] },
   { username: 'kamalganj@sps.com', name: 'Sunita Yadav', role: 'accountant', branches: [1] },
   { username: 'kannauj@sps.com', name: 'Anil Dubey', role: 'accountant', branches: [2] },
 ];
@@ -220,5 +223,5 @@ insert('audit_log', {
 writeFileSync(new URL('./.seed.sql', import.meta.url), sql.join('\n') + '\n');
 console.log(`Wrote seed/.seed.sql: ${id} students, ${staff.length} staff, ${users.length} logins.`);
 console.log(
-  'Sign in as admin@sps.com (password admin@123), or manager@sps.com, kamalganj@sps.com, kannauj@sps.com (password demo12345).',
+  'Sign in as admin@sps.com (password admin@123), manager@sps.com (manager@123), or kamalganj@sps.com, kannauj@sps.com (password demo12345).',
 );
