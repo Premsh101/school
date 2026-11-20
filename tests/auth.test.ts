@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { hashPassword, needsRehash, verifyPassword } from '../src/worker/core/password';
-import { Client, OWNER, setupSchool, signIn } from './helpers';
+import { addLogin, Client, OWNER, sectionId, setupSchool, signIn } from './helpers';
 
 describe('password hashing', () => {
   it('verifies the right password only', async () => {
@@ -15,39 +15,28 @@ describe('password hashing', () => {
   });
 });
 
-describe('setup and sign-in', () => {
-  let owner: Client;
-
-  it('asks for setup on an empty database and blocks everything else', async () => {
+describe('sign in only, no sign up', () => {
+  it('has no way to create a login without signing in', async () => {
     const anon = new Client();
-    expect((await anon.get('/bootstrap')).data.needs_setup).toBe(true);
+    expect([401, 404]).toContain(
+      (await anon.post('/setup', { username: 'x', password: 'x' })).status,
+    );
+    expect((await anon.post('/users', { username: 'x', name: 'x', role: 'admin' })).status).toBe(
+      401,
+    );
     expect((await anon.get('/students?session_id=1')).status).toBe(401);
   });
 
-  it('creates the owner, branch, sections and session, then closes', async () => {
-    owner = await setupSchool();
-    const boot = (await owner.get('/bootstrap')).data;
+  it('lists the open schools on the sign-in screen', async () => {
+    await setupSchool();
+    const boot = (await new Client().get('/bootstrap')).data;
     expect(boot.needs_setup).toBe(false);
-    expect(boot.user).toMatchObject({ username: 'owner', role: 'admin' });
-    expect(boot.branches).toHaveLength(1);
-    expect(boot.sessions[0]).toMatchObject({ name: '2026-27', is_current: 1, start_month: 4 });
-    expect(boot.classes).toHaveLength(15);
-    expect(boot.sections).toHaveLength(15);
-    expect(owner.cookie).toMatch(/^sid=/);
-
-    const again = await new Client().post('/setup', {
-      school_name: 'Other',
-      owner_name: 'Hacker',
-      username: 'hacker',
-      password: 'hacker-pass',
-      branch: { name: 'X', code: 'XX' },
-      session_start_year: 2026,
-    });
-    expect(again.status).toBe(403);
-    expect((await new Client().post('/restore/begin')).status).toBe(403);
+    expect(boot.user).toBeNull();
+    expect(boot.login_branches).toEqual([{ id: 1, name: 'Kamalganj' }]);
   });
 
   it('never stores the session token itself', async () => {
+    const owner = await signIn(OWNER.username, OWNER.password);
     const token = owner.cookie.replace('sid=', '');
     const rows = await env.DB.prepare('SELECT token_hash FROM auth_sessions').all<{
       token_hash: string;
@@ -58,16 +47,14 @@ describe('setup and sign-in', () => {
 
   it('rejects wrong passwords and limits repeated failures', async () => {
     const anon = new Client();
-    for (let i = 0; i < 5; i++) {
-      expect((await anon.post('/auth/login', { username: 'owner', password: 'nope' })).status).toBe(
-        401,
-      );
-    }
-    const locked = await anon.post('/auth/login', OWNER);
+    const attempt = (password: string) =>
+      anon.post('/auth/login', { username: OWNER.username, password, branch_id: null });
+    for (let i = 0; i < 5; i++) expect((await attempt('nope')).status).toBe(401);
+    const locked = await attempt(OWNER.password);
     expect(locked.status).toBe(429);
     expect(locked.data.error).toMatch(/Too many wrong attempts/);
     await env.DB.prepare('DELETE FROM login_attempts').run();
-    expect((await anon.post('/auth/login', OWNER)).status).toBe(200);
+    expect((await attempt(OWNER.password)).status).toBe(200);
   });
 
   it('signs out everywhere else when the password changes', async () => {
@@ -85,13 +72,20 @@ describe('setup and sign-in', () => {
       (
         await phone.post('/auth/password', {
           current_password: OWNER.password,
+          new_password: OWNER.password,
+        })
+      ).data.error,
+    ).toMatch(/different from the old one/);
+    expect(
+      (
+        await phone.post('/auth/password', {
+          current_password: OWNER.password,
           new_password: 'new-pass-123',
         })
       ).status,
     ).toBe(200);
     expect((await laptop.get('/home')).status).toBe(401);
     expect((await phone.get('/home')).status).toBe(200);
-    expect((await new Client().post('/auth/login', OWNER)).status).toBe(401);
     // put it back for other tests
     await phone.post('/auth/password', {
       current_password: 'new-pass-123',
@@ -106,220 +100,274 @@ describe('setup and sign-in', () => {
   });
 });
 
-describe('roles and branch scope', () => {
+describe('roles, logins and the school chosen at sign-in', () => {
   let owner: Client;
-  let principal: Client;
-  let accountant: Client;
-  let branch2: number;
+  let kannauj: number;
 
   beforeAll(async () => {
     owner = await signIn(OWNER.username, OWNER.password);
-    expect((await owner.post('/branches', { name: 'Second', code: 'SEC' })).status).toBe(200);
-    branch2 = (await owner.get('/bootstrap')).data.branches.find((b: any) => b.code === 'SEC').id;
-    await owner.post('/users', {
-      username: 'principal1',
-      name: 'P One',
-      role: 'principal',
-      branch_ids: [1],
-      password: 'principal-1',
+    expect((await owner.post('/branches', { name: 'Kannauj', code: 'KNJ' })).status).toBe(200);
+    kannauj = (await owner.get('/bootstrap')).data.my_branches.find(
+      (b: any) => b.code === 'KNJ',
+    ).id;
+    await addLogin(owner, {
+      username: 'manager',
+      name: 'Manager',
+      role: 'management',
+      password: 'manager-1',
     });
-    await owner.post('/users', {
-      username: 'acct2',
-      name: 'A Two',
+    await addLogin(owner, {
+      username: 'acct@sps.com',
+      name: 'Kamalganj Accountant',
       role: 'accountant',
-      branch_ids: [branch2],
-      password: 'accountant-2',
+      branch_ids: [1],
+      password: 'accountant-1',
     });
-    principal = await signIn('principal1', 'principal-1');
-    accountant = await signIn('acct2', 'accountant-2');
+    // one student in each school
+    for (const [branch, name] of [
+      [1, 'Kamalganj Kid'],
+      [kannauj, 'Kannauj Kid'],
+    ] as const) {
+      const res = await owner.post('/students', {
+        name,
+        session_id: 1,
+        enrolment: { branch_id: branch, class_id: 4, section_id: await sectionId(branch, 4) },
+      });
+      expect(res.status).toBe(200);
+    }
   });
 
-  it('rejects a duplicate branch code with a helpful message', async () => {
-    const res = await owner.post('/branches', { name: 'Again', code: 'sec' });
-    expect(res.status).toBe(409);
-    expect(res.data.error).toMatch(/already used/);
+  const names = async (c: Client) =>
+    (await c.get('/students?session_id=1')).data.rows.map((r: any) => r.name).sort();
+
+  it('accepts an email as the username', async () => {
+    const acct = await signIn('ACCT@sps.com', 'accountant-1', 1);
+    expect((await acct.get('/bootstrap')).data.user.username).toBe('acct@sps.com');
   });
 
-  it('shows users only their own branches', async () => {
-    expect((await principal.get('/bootstrap')).data.branches.map((b: any) => b.id)).toEqual([1]);
-    expect((await accountant.get('/bootstrap')).data.branches.map((b: any) => b.id)).toEqual([
-      branch2,
-    ]);
+  it('shows only the chosen school', async () => {
+    const all = await signIn(OWNER.username, OWNER.password, null);
+    expect(await names(all)).toEqual(['Kamalganj Kid', 'Kannauj Kid']);
+    const k = await signIn(OWNER.username, OWNER.password, kannauj);
+    expect(await names(k)).toEqual(['Kannauj Kid']);
+    const boot = (await k.get('/bootstrap')).data;
+    expect(boot.user.branch_id).toBe(kannauj);
+    expect(boot.branches.map((b: any) => b.code)).toEqual(['KNJ']);
+    expect(boot.my_branches.map((b: any) => b.code)).toEqual(['KMG', 'KNJ']);
+    expect(boot.sections.every((s: any) => s.branch_id === kannauj)).toBe(true);
+    // data of the other school cannot be reached directly either
+    const kid = (await all.get('/students?session_id=1&q=Kamalganj')).data.rows[0];
+    expect((await k.get(`/students/${kid.student_id}`)).status).toBe(403);
   });
 
-  it('keeps school settings for the admin', async () => {
-    expect((await principal.put('/settings', { school_name: 'Mine' })).status).toBe(403);
-    expect((await principal.post('/branches', { name: 'B', code: 'BB' })).status).toBe(403);
-    expect((await principal.post('/sessions', { start_year: 2027 })).status).toBe(403);
-    expect((await principal.get('/audit')).status).toBe(403);
-    expect((await principal.get('/backup')).status).toBe(403);
-    expect(
-      (await owner.put('/settings', { school_name: 'Soni Pariya Public School' })).status,
-    ).toBe(200);
+  it('lets admin and management switch school without signing in again', async () => {
+    const m = await signIn('manager', 'manager-1', 1);
+    expect(await names(m)).toEqual(['Kamalganj Kid']);
+    expect((await m.post('/auth/school', { branch_id: kannauj })).status).toBe(200);
+    expect(await names(m)).toEqual(['Kannauj Kid']);
+    expect((await m.post('/auth/school', { branch_id: null })).status).toBe(200);
+    expect(await names(m)).toEqual(['Kamalganj Kid', 'Kannauj Kid']);
   });
 
-  it('lets a principal manage lower logins in their own branch only', async () => {
-    const ok = await principal.post('/users', {
+  it('keeps an accountant to the schools assigned to them', async () => {
+    const tryLogin = (branch: number | null) =>
+      new Client().post('/auth/login', {
+        username: 'acct@sps.com',
+        password: 'accountant-1',
+        branch_id: branch,
+      });
+    expect((await tryLogin(null)).data.error).toMatch(/Choose your school/);
+    const wrong = await tryLogin(kannauj);
+    expect(wrong.status).toBe(403);
+    expect(wrong.data.error).toMatch(/not assigned to this school/);
+    expect((await tryLogin(999)).status).toBe(404);
+    const acct = await signIn('acct@sps.com', 'accountant-1', 1);
+    expect(await names(acct)).toEqual(['Kamalganj Kid']);
+    expect((await acct.post('/auth/school', { branch_id: kannauj })).status).toBe(403);
+    expect((await acct.post('/auth/school', { branch_id: null })).status).toBe(403);
+  });
+
+  it('ends an accountant’s session when they are moved off that school', async () => {
+    const acct = await signIn('acct@sps.com', 'accountant-1', 1);
+    const row = (await owner.get('/users')).data.find((u: any) => u.username === 'acct@sps.com');
+    const edit = (branch_ids: number[]) =>
+      owner.put(`/users/${row.id}`, {
+        username: 'acct@sps.com',
+        name: 'Kamalganj Accountant',
+        role: 'accountant',
+        branch_ids,
+      });
+    expect((await edit([kannauj])).status).toBe(200);
+    expect((await acct.get('/home')).status).toBe(401);
+    await edit([1]);
+  });
+
+  it('gives each role its own powers', async () => {
+    const m = await signIn('manager', 'manager-1', null);
+    const acct = await signIn('acct@sps.com', 'accountant-1', 1);
+    // management: daily work in every school
+    const added = await m.post('/students', {
+      name: 'Added By Manager',
+      session_id: 1,
+      enrolment: { branch_id: kannauj, class_id: 5, section_id: await sectionId(kannauj, 5) },
+    });
+    expect(added.status).toBe(200);
+    expect((await m.get('/staff')).status).toBe(200);
+    // ...but not logins, settings, branches, sessions, activity log or backup
+    for (const [method, path] of [
+      ['get', '/users'],
+      ['put', '/settings'],
+      ['post', '/branches'],
+      ['post', '/sessions'],
+      ['get', '/audit'],
+      ['get', '/backup'],
+    ] as const) {
+      const res = method === 'get' ? await m.get(path) : await m[method](path, {});
+      expect(res.status, `${method} ${path}`).toBe(403);
+    }
+    // accountant: can look students up for fees, nothing more
+    expect((await acct.get('/students?session_id=1')).status).toBe(200);
+    expect((await acct.post('/students', { name: 'X', session_id: 1, enrolment: {} })).status).toBe(
+      403,
+    );
+    expect((await acct.get('/staff')).status).toBe(403);
+    expect((await acct.get('/users')).status).toBe(403);
+  });
+
+  it('only accepts the three roles, and gives schools to accountants only', async () => {
+    const bad = await owner.post('/users', {
       username: 'teacher1',
       name: 'T',
       role: 'teacher',
-      branch_ids: [1],
       password: 'teacher-11',
     });
-    expect(ok.status).toBe(200);
-    expect(
-      (
-        await principal.post('/users', {
-          username: 'teach2',
-          name: 'T',
-          role: 'teacher',
-          branch_ids: [branch2],
-          password: 'teacher-22',
-        })
-      ).status,
-    ).toBe(403);
-    expect(
-      (
-        await principal.post('/users', {
-          username: 'boss',
-          name: 'B',
-          role: 'admin',
-          branch_ids: [],
-          password: 'boss-pass-1',
-        })
-      ).status,
-    ).toBe(403);
-    const visible = (await principal.get('/users')).data.map((u: any) => u.username);
-    expect(visible).toEqual(['teacher1']);
-    expect((await accountant.get('/users')).status).toBe(403);
-    const ownerRow = (await owner.get('/users')).data.find((u: any) => u.username === 'owner');
-    expect(
-      (
-        await principal.put(`/users/${ownerRow.id}`, {
-          username: 'owner',
-          name: 'X',
-          role: 'staff',
-          branch_ids: [1],
-        })
-      ).status,
-    ).toBe(403);
-  });
-
-  it('stops an admin locking themselves out', async () => {
-    const me = (await owner.get('/bootstrap')).data.user;
-    const res = await owner.put(`/users/${me.id}`, {
-      username: 'owner',
-      name: 'Owner',
-      role: 'admin',
+    expect(bad.status).toBe(400);
+    const noSchool = await owner.post('/users', {
+      username: 'acct2',
+      name: 'A',
+      role: 'accountant',
       branch_ids: [],
-      active: false,
+      password: 'accountant-2',
     });
-    expect(res.status).toBe(400);
+    expect(noSchool.data.error).toMatch(/Tick at least one school/);
+    await owner.post('/users', {
+      username: 'manager2',
+      name: 'M2',
+      role: 'management',
+      branch_ids: [1],
+      password: 'manager-22',
+    });
+    const users = (await owner.get('/users')).data;
+    expect(users.find((u: any) => u.username === 'manager2').branch_ids).toEqual([]);
   });
 
-  it('signs a user out when the admin resets their password or switches them off', async () => {
-    const t = await signIn('teacher1', 'teacher-11');
-    const row = (await owner.get('/users')).data.find((u: any) => u.username === 'teacher1');
-    await owner.put(`/users/${row.id}`, {
-      username: 'teacher1',
-      name: 'T',
-      role: 'teacher',
+  it('makes a new person choose their own password before anything else', async () => {
+    await owner.post('/users', {
+      username: 'new@sps.com',
+      name: 'New Person',
+      role: 'accountant',
       branch_ids: [1],
-      password: 'teacher-new1',
+      password: 'first-pass-1',
     });
-    expect((await t.get('/home')).status).toBe(401);
-    const t2 = await signIn('teacher1', 'teacher-new1');
+    const person = await signIn('new@sps.com', 'first-pass-1', 1);
+    const boot = (await person.get('/bootstrap')).data;
+    expect(boot.user.must_change_password).toBe(true);
+    expect((await person.get('/students?session_id=1')).status).toBe(403);
+    expect(
+      (
+        await person.post('/auth/password', {
+          current_password: 'first-pass-1',
+          new_password: 'my-own-pass',
+        })
+      ).status,
+    ).toBe(200);
+    expect((await person.get('/bootstrap')).data.user.must_change_password).toBe(false);
+    expect((await person.get('/students?session_id=1')).status).toBe(200);
+    expect((await person.get('/bootstrap')).data.user.branch_id).toBe(1); // still in the same school
+  });
+
+  it('signs a person out and asks for a new password when the admin resets it', async () => {
+    const acct = await signIn('acct@sps.com', 'accountant-1', 1);
+    const row = (await owner.get('/users')).data.find((u: any) => u.username === 'acct@sps.com');
     await owner.put(`/users/${row.id}`, {
-      username: 'teacher1',
-      name: 'T',
-      role: 'teacher',
+      username: 'acct@sps.com',
+      name: 'Kamalganj Accountant',
+      role: 'accountant',
+      branch_ids: [1],
+      password: 'reset-pass-1',
+    });
+    expect((await acct.get('/home')).status).toBe(401);
+    const again = await signIn('acct@sps.com', 'reset-pass-1', 1);
+    expect((await again.get('/bootstrap')).data.user.must_change_password).toBe(true);
+    // switching a login off signs them out and stops them signing in
+    await owner.put(`/users/${row.id}`, {
+      username: 'acct@sps.com',
+      name: 'Kamalganj Accountant',
+      role: 'accountant',
       branch_ids: [1],
       active: false,
     });
-    expect((await t2.get('/home')).status).toBe(401);
+    expect((await again.get('/bootstrap')).data.user).toBeNull();
     expect(
-      (await new Client().post('/auth/login', { username: 'teacher1', password: 'teacher-new1' }))
-        .status,
+      (
+        await new Client().post('/auth/login', {
+          username: 'acct@sps.com',
+          password: 'reset-pass-1',
+          branch_id: 1,
+        })
+      ).status,
     ).toBe(403);
   });
 
-  it('enforces branch scope on students and staff', async () => {
-    const sec1 = (await owner.get('/bootstrap')).data.sections.find(
-      (s: any) => s.branch_id === 1 && s.class_id === 4,
-    ).id;
-    const created = await owner.post('/students', {
-      name: 'Scope Kid',
-      session_id: 1,
-      enrolment: { branch_id: 1, class_id: 4, section_id: sec1, roll_no: 90 },
-    });
-    expect(created.status).toBe(200);
-    // accountant of branch 2 cannot see or open a branch 1 student
-    expect((await accountant.get('/students?session_id=1')).data.total).toBe(0);
-    expect((await accountant.get(`/students/${created.data.id}`)).status).toBe(403);
-    // and cannot edit students at all
-    expect((await accountant.put(`/students/${created.data.id}`, { name: 'X' })).status).toBe(403);
-    // principal of branch 1 can see, but cannot add into branch 2
-    expect((await principal.get('/students?session_id=1')).data.total).toBe(1);
-    const sec2 = (await owner.get('/bootstrap')).data.sections.find(
-      (s: any) => s.branch_id === branch2 && s.class_id === 4,
-    ).id;
-    const denied = await principal.post('/students', {
-      name: 'Other',
-      session_id: 1,
-      enrolment: { branch_id: branch2, class_id: 4, section_id: sec2 },
-    });
-    expect(denied.status).toBe(403);
-    expect((await principal.post('/staff', { name: 'S', branch_id: branch2 })).status).toBe(403);
-    expect(
-      (await principal.post('/staff', { name: 'S', branch_id: 1, designation: 'Clerk' })).status,
-    ).toBe(200);
-    expect((await owner.get('/staff')).data).toHaveLength(1);
-    expect((await accountant.get('/staff')).status).toBe(403);
-    expect(
-      (await principal.post('/sections', { branch_id: branch2, class_id: 4, name: 'B' })).status,
-    ).toBe(403);
-    expect(
-      (await principal.post('/sections', { branch_id: 1, class_id: 4, name: 'B' })).status,
-    ).toBe(200);
-  });
-
-  it('signs an admin out of other devices when they reset their own password in Logins', async () => {
+  it('lets the admin reset their own password without being locked out', async () => {
     const other = await signIn(OWNER.username, OWNER.password);
     const me = (await owner.get('/bootstrap')).data.user;
     const res = await owner.put(`/users/${me.id}`, {
-      username: 'owner',
+      username: OWNER.username,
       name: 'Owner',
       role: 'admin',
-      branch_ids: [],
       password: OWNER.password,
     });
     expect(res.status).toBe(200);
     expect((await other.get('/home')).status).toBe(401);
     expect((await owner.get('/home')).status).toBe(200);
-  });
-
-  it('gives dashboard counts only to roles that may see the lists', async () => {
-    await owner.post('/users', {
-      username: 'helper1',
-      name: 'Helper',
-      role: 'staff',
-      branch_ids: [1],
-      password: 'helper-pass-1',
+    expect((await owner.get('/bootstrap')).data.user.must_change_password).toBe(false);
+    const off = await owner.put(`/users/${me.id}`, {
+      username: OWNER.username,
+      name: 'Owner',
+      role: 'admin',
+      active: false,
     });
-    const helper = await signIn('helper1', 'helper-pass-1');
-    expect((await helper.get('/home')).data).toEqual({ students: [], staff: [] });
-    const acct = (await accountant.get('/home')).data;
-    expect(acct.staff).toEqual([]);
-    expect((await principal.get('/home')).data.students).toEqual([{ branch_id: 1, count: 1 }]);
+    expect(off.status).toBe(400);
+    const demote = await owner.put(`/users/${me.id}`, {
+      username: OWNER.username,
+      name: 'Owner',
+      role: 'management',
+    });
+    expect(demote.status).toBe(400);
   });
 
-  it('records changes in the audit log', async () => {
+  it('refuses a closed school at sign-in', async () => {
+    await owner.put(`/branches/${kannauj}`, { name: 'Kannauj', code: 'KNJ', active: false });
+    const res = await new Client().post('/auth/login', {
+      username: OWNER.username,
+      password: OWNER.password,
+      branch_id: kannauj,
+    });
+    expect(res.data.error).toMatch(/closed/);
+    expect((await new Client().get('/bootstrap')).data.login_branches).toEqual([
+      { id: 1, name: 'Kamalganj' },
+    ]);
+    await owner.put(`/branches/${kannauj}`, { name: 'Kannauj', code: 'KNJ', active: true });
+  });
+
+  it('records changes in the activity log', async () => {
     const log = (await owner.get('/audit')).data;
     expect(log.total).toBeGreaterThan(5);
     expect(
       log.rows.some(
         (r: any) =>
-          r.entity === 'student' && r.action === 'create' && r.user_name === 'Owner' && r.entity_id,
+          r.entity === 'user' && r.action === 'create' && r.summary.includes('Management'),
       ),
     ).toBe(true);
   });

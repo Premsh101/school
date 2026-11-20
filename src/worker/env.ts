@@ -6,8 +6,13 @@ export interface AuthUser {
   username: string;
   name: string;
   role: Role;
-  /** Branches assigned to the user. Admins ignore this and see every branch. */
-  branch_ids: number[];
+  /** Branches assigned to the user (accountants). Admin and management may use every branch. */
+  assigned_branch_ids: number[];
+  /** The school chosen at sign-in; null = all schools. */
+  session_branch_id: number | null;
+  /** The branches this request may touch, or null for every branch. Always use branchScope(). */
+  scope: number[] | null;
+  must_change_password: boolean;
   session_id: number;
 }
 

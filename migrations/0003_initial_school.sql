@@ -2,17 +2,19 @@
 -- release so nobody has to type it in.
 --
 --   * the school's name and address
---   * the two branches, Kamalganj (KMG) and Kannauj (KNJ), each with section A in every class
+--   * the two schools (branches), Kamalganj (KMG) and Kannauj (KNJ), each with section A
+--     in every class
 --   * the 2026-27 session, set as the current one
---   * the printed 2026-27 fee rate chart, for both branches
---
--- The owner's login is NOT here: a password must never be kept in the repository. The first
--- visit shows a short screen that asks only for the owner's name, username and password.
+--   * the printed 2026-27 fee rate chart, for both schools
+--   * the first admin login: admin@sps.com, password admin@123 (asked for by the owner).
+--     Only a PBKDF2 hash of the password is stored, and the app makes the admin choose a
+--     new password at the first sign-in, so admin@123 stops working straight away.
 --
 -- Everything below is skipped when a login already exists (a school that was set up before
 -- this migration), and INSERT OR IGNORE never overwrites a row that is already there.
--- The branch codes, names and every fee can be changed later in the app. Never edit this
--- file after it has been applied in production; change data in the app instead.
+-- The admin login is added last, because the other statements check that no login exists.
+-- Names, codes and every fee can be changed later in the app. Never edit this file after
+-- it has been applied in production; change data in the app instead.
 
 INSERT OR IGNORE INTO settings (key, value)
 SELECT 'school_name', 'Soni Pariya Public School' WHERE NOT EXISTS (SELECT 1 FROM users);
@@ -70,5 +72,13 @@ WHERE s.name = '2026-27' AND NOT EXISTS (SELECT 1 FROM users);
 
 INSERT INTO audit_log (at, user_name, action, entity, summary)
 SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'System', 'create', 'school',
-       'Loaded the school, branches Kamalganj and Kannauj, session 2026-27 and the fee chart'
+       'Loaded the school, Kamalganj and Kannauj, session 2026-27, the fee chart and the admin login'
+WHERE NOT EXISTS (SELECT 1 FROM users);
+
+-- The first admin login. The password is admin@123, stored only as a hash. must_change_password
+-- = 1 makes the admin set their own password at the first sign-in.
+INSERT INTO users (username, name, password_hash, role, active, must_change_password, created_at, updated_at)
+SELECT 'admin@sps.com', 'Admin',
+       'pbkdf2-sha256$20000$I9FK5Q3PsTus3fhFqbX4fw==$Ms+lwaXZPPz/zNH4ndFwBvR2uPMxS2CeHpM0JEOIaiE=',
+       'admin', 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE NOT EXISTS (SELECT 1 FROM users);

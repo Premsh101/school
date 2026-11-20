@@ -11,7 +11,7 @@ import {
 } from '../src/shared/dates';
 import { admissionTotal, DEFAULT_RATE_CHART, groupRates, type FeeRate } from '../src/shared/fees';
 import { formatINR } from '../src/shared/format';
-import { can, manageableRoles } from '../src/shared/permissions';
+import { can, isRole, ROLES, seesAllBranches } from '../src/shared/permissions';
 
 describe('dates', () => {
   it('uses India time for today', () => {
@@ -56,16 +56,25 @@ describe('money format', () => {
 });
 
 describe('permissions', () => {
-  it('gives each role only its own powers', () => {
+  it('has three roles, each with its own powers', () => {
+    expect(ROLES).toEqual(['admin', 'management', 'accountant']);
+    expect(isRole('teacher')).toBe(false);
+    expect(can('teacher' as never, 'students.view')).toBe(false);
     expect(can('admin', 'school.manage')).toBe(true);
-    expect(can('principal', 'students.promote')).toBe(true);
-    expect(can('principal', 'school.manage')).toBe(false);
-    expect(can('principal', 'backup.manage')).toBe(false);
+    expect(can('admin', 'users.manage')).toBe(true);
+    expect(can('management', 'students.promote')).toBe(true);
+    expect(can('management', 'staff.edit')).toBe(true);
+    expect(can('management', 'users.manage')).toBe(false);
+    expect(can('management', 'school.manage')).toBe(false);
+    expect(can('management', 'backup.manage')).toBe(false);
     expect(can('accountant', 'students.view')).toBe(true);
     expect(can('accountant', 'students.edit')).toBe(false);
-    expect(can('staff', 'students.view')).toBe(false);
-    expect(manageableRoles('principal')).toEqual(['accountant', 'teacher', 'staff']);
-    expect(manageableRoles('teacher')).toEqual([]);
+    expect(can('accountant', 'users.manage')).toBe(false);
+    expect([
+      seesAllBranches('admin'),
+      seesAllBranches('management'),
+      seesAllBranches('accountant'),
+    ]).toEqual([true, true, false]);
   });
 });
 

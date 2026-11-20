@@ -63,11 +63,13 @@ export function AccountPage() {
           <dd>{boot.user.username}</dd>
           <dt>{t('Role')}</dt>
           <dd>{t(ROLE_LABELS[boot.user.role])}</dd>
-          <dt>{t('Branches')}</dt>
+          <dt>{t('Working in')}</dt>
+          <dd>{boot.currentBranch?.name ?? t('All schools')}</dd>
+          <dt>{t('Schools')}</dt>
           <dd>
-            {boot.user.role === 'admin'
-              ? t('All branches')
-              : boot.branches.map((b) => b.name).join(', ')}
+            {boot.user.all_schools
+              ? t('All schools')
+              : boot.myBranches.map((b) => b.name).join(', ')}
           </dd>
         </dl>
       </div>

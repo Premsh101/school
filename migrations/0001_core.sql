@@ -53,8 +53,12 @@ CREATE TABLE users (
   username TEXT NOT NULL UNIQUE COLLATE NOCASE,
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'principal', 'accountant', 'teacher', 'staff')),
+  -- admin, management or accountant. Checked in code (src/shared/permissions.ts) rather than
+  -- here, so later modules can add roles such as teacher without rebuilding this table.
+  role TEXT NOT NULL,
   active INTEGER NOT NULL DEFAULT 1,
+  -- 1 = must set a new password at the next sign-in (new logins, reset passwords).
+  must_change_password INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -69,6 +73,9 @@ CREATE TABLE auth_sessions (
   id INTEGER PRIMARY KEY,
   token_hash TEXT NOT NULL UNIQUE,
   user_id INTEGER NOT NULL REFERENCES users(id),
+  -- The school chosen at sign-in. Everything the person sees is limited to it.
+  -- NULL = all schools, which only admin and management may choose.
+  branch_id INTEGER REFERENCES branches(id),
   created_at INTEGER NOT NULL,  -- unix seconds
   expires_at INTEGER NOT NULL
 );

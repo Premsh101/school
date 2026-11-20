@@ -10,16 +10,15 @@ import { ErrorNote, Loading, ToastProvider } from './components/ui';
 import { webModules } from './modules';
 import { AccountPage, applyTheme, savedTheme } from './pages/Account';
 import { AuditPage } from './pages/Audit';
-import { BackupPage } from './pages/Backup';
+import { BackupPage, UnfinishedRestorePage } from './pages/Backup';
 import { BranchesPage } from './pages/Branches';
 import { ClassesPage } from './pages/Classes';
 import { HomePage, MorePage } from './pages/Home';
 import { ImportPage } from './pages/Import';
-import { LoginPage } from './pages/Login';
+import { LoginPage, NewPasswordPage } from './pages/Login';
 import { PromotionPage } from './pages/Promotion';
 import { SessionsPage } from './pages/Sessions';
 import { SettingsPage } from './pages/Settings';
-import { SetupPage } from './pages/Setup';
 import { StaffPage } from './pages/Staff';
 import { StudentDetailPage } from './pages/StudentDetail';
 import { StudentFormPage } from './pages/StudentForm';
@@ -68,9 +67,12 @@ function App() {
       </div>
     );
   }
-  if (boot.data.needs_setup)
-    return <SetupPage preset={boot.data.preset} schoolName={boot.data.school.name} />;
-  if (!boot.data.user) return <LoginPage school={boot.data.school} />;
+  // There is no sign-up. No login at all only happens if a restore was started and not
+  // finished, so the only thing offered then is to finish it.
+  if (boot.data.needs_setup) return <UnfinishedRestorePage />;
+  if (!boot.data.user)
+    return <LoginPage school={boot.data.school} branches={boot.data.login_branches} />;
+  if (boot.data.user.must_change_password) return <NewPasswordPage name={boot.data.user.name} />;
 
   const page = (permission: string | undefined, element: React.ReactNode) => (
     <Guard permission={permission}>{element}</Guard>

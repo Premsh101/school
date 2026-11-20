@@ -106,9 +106,14 @@ export function BackupPage() {
         <h2>{t('Restore a backup')}</h2>
         <p>
           {t(
-            'A backup can only be put back into an empty database, so that live data is never overwritten by mistake. On a new, empty installation the first screen offers "I have a backup file to restore".',
+            'Use this only on a new installation, before any students are added: for example when moving to a new Cloudflare account. Everything that came with the app is replaced by the backup, and you then sign in with the logins from the backup.',
           )}
         </p>
+        <RestorePanel
+          onDone={() => {
+            window.location.assign('/');
+          }}
+        />
       </div>
     </div>
   );
@@ -116,7 +121,7 @@ export function BackupPage() {
 
 const RESTORE_CHUNK = 400;
 
-/** Shown on the first-run screen: loads a backup file into the empty database. */
+/** Loads a backup file into a new installation (the server refuses once students exist). */
 export function RestorePanel({ onDone }: { onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState('');
@@ -199,6 +204,26 @@ export function RestorePanel({ onDone }: { onDone: () => void }) {
       >
         {t('Restore this backup')}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Shown only when no login exists at all, which happens only if a restore was started and
+ * not finished. There is no sign-up, so finishing the restore is the way back in.
+ */
+export function UnfinishedRestorePage() {
+  return (
+    <div className="center-page">
+      <div className="card stack">
+        <h1 className="stamp-title">{t('Finish restoring the backup')}</h1>
+        <p>
+          {t(
+            'A restore was started but did not finish, so there are no logins yet. Choose the same backup file again to finish it.',
+          )}
+        </p>
+        <RestorePanel onDone={() => window.location.assign('/')} />
+      </div>
     </div>
   );
 }

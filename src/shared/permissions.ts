@@ -1,15 +1,23 @@
-// Roles are fixed sets of permissions. Modules add their own permissions to this map
-// (for example 'fees.collect') when they are built.
+// Roles are fixed sets of permissions. Modules add their own permissions to roles
+// (for example 'fees.collect') through their manifest.
+//
+//   admin       everything, in every school; the only role that creates logins
+//   management  the daily work of every school: students, staff, promotion, fees
+//   accountant  fees in the schools they are assigned to
 
-export const ROLES = ['admin', 'principal', 'accountant', 'teacher', 'staff'] as const;
+export const ROLES = ['admin', 'management', 'accountant'] as const;
 export type Role = (typeof ROLES)[number];
 
 export const ROLE_LABELS: Record<Role, string> = {
-  admin: 'Owner / Admin',
-  principal: 'Principal',
+  admin: 'Admin',
+  management: 'Management',
   accountant: 'Accountant',
-  teacher: 'Teacher',
-  staff: 'Staff',
+};
+
+export const ROLE_HINTS: Record<Role, string> = {
+  admin: 'Everything in every school, including logins and settings',
+  management: 'Students, staff and fees in every school',
+  accountant: 'Fees in the schools you tick below',
 };
 
 export const CORE_PERMISSIONS = [
@@ -19,8 +27,8 @@ export const CORE_PERMISSIONS = [
   'students.promote',
   'staff.view',
   'staff.edit',
-  'structure.edit', // sections of own branches
-  'users.manage', // principals manage accountants, teachers and staff of own branches
+  'structure.edit', // sections
+  'users.manage', // logins: admin only
   'school.manage', // branches, sessions, subjects, settings, modules
   'audit.view',
   'backup.manage',
@@ -30,7 +38,7 @@ export type Permission = CorePermission | (string & {});
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[] | '*'> = {
   admin: '*',
-  principal: [
+  management: [
     'students.view',
     'students.edit',
     'students.import',
@@ -38,11 +46,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[] | '*'> = {
     'staff.view',
     'staff.edit',
     'structure.edit',
-    'users.manage',
   ],
   accountant: ['students.view'],
-  teacher: ['students.view'],
-  staff: [],
 };
 
 /** Extra permissions granted to roles by modules, e.g. fees → accountant. */
@@ -52,20 +57,18 @@ export function grantModulePermissions(role: Role, permissions: Permission[]): v
   modulePermissions[role] = [...(modulePermissions[role] ?? []), ...permissions];
 }
 
+export function isRole(value: string): value is Role {
+  return (ROLES as readonly string[]).includes(value);
+}
+
 export function can(role: Role, permission: Permission): boolean {
+  if (!isRole(role)) return false;
   const own = ROLE_PERMISSIONS[role];
   if (own === '*') return true;
   return own.includes(permission) || (modulePermissions[role] ?? []).includes(permission);
 }
 
-/** Admins see every branch; everyone else only the branches they are assigned to. */
+/** Admin and management work in every school; an accountant only in their assigned schools. */
 export function seesAllBranches(role: Role): boolean {
-  return role === 'admin';
-}
-
-/** Roles a user with this role may create or edit. */
-export function manageableRoles(role: Role): Role[] {
-  if (role === 'admin') return [...ROLES];
-  if (role === 'principal') return ['accountant', 'teacher', 'staff'];
-  return [];
+  return role === 'admin' || role === 'management';
 }

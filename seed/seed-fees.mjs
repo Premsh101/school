@@ -31,7 +31,11 @@ const rnd = (n) => {
 };
 const pad = (n) => String(n).padStart(2, '0');
 
-await call('POST', '/auth/login', { username: 'admin', password: 'demo12345' });
+await call('POST', '/auth/login', {
+  username: 'admin@sps.com',
+  password: 'admin@123',
+  branch_id: null,
+});
 const boot = await call('GET', '/bootstrap');
 const session = boot.sessions.find((s) => s.is_current);
 const today = boot.today;

@@ -29,7 +29,7 @@ export function BranchesPage() {
         </Button>
       </PageHead>
       <ul className="list">
-        {boot.branches.map((b) => (
+        {boot.myBranches.map((b) => (
           <li key={b.id}>
             <button type="button" className="item" onClick={() => setEditing(b)}>
               <span className="grow">

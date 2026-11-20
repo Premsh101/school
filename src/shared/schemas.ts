@@ -19,7 +19,10 @@ const username = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z0-9._-]{3,30}$/, 'Username must be 3 to 30 letters, numbers, dot, dash');
+  .regex(
+    /^[a-z0-9._@-]{3,60}$/,
+    'Username must be 3 to 60 letters or numbers; an email like name@sps.com is fine',
+  );
 
 export const branchInput = z.object({
   name: text(80).min(1, 'Enter the branch name'),
@@ -33,26 +36,14 @@ export const branchInput = z.object({
   active: z.boolean().default(true),
 });
 
-export const setupInput = z.object({
-  school_name: text(100).min(1, 'Enter the school name'),
-  owner_name: text(80).min(1, 'Enter your name'),
-  username,
-  password,
-  branch: branchInput,
-  session_start_year: z.number().int().min(2000).max(2100),
-});
-
-/** Setup when the school, branches and fees are already loaded: only the owner's login is asked for. */
-export const ownerSetupInput = z.object({
-  owner_name: text(80).min(1, 'Enter your name'),
-  username,
-  password,
-});
-
 export const loginInput = z.object({
-  username: z.string().trim().min(1),
-  password: z.string().min(1),
+  username: z.string().trim().min(1, 'Enter your username'),
+  password: z.string().min(1, 'Enter your password'),
+  /** The school to work in. null = all schools (admin and management only). */
+  branch_id: z.union([id, z.null()]),
 });
+
+export const branchSwitchInput = z.object({ branch_id: z.union([id, z.null()]) });
 
 export const passwordChangeInput = z.object({
   current_password: z.string().min(1),
@@ -195,8 +186,6 @@ export const promotionInput = z.object({
 });
 
 export type BranchInput = z.infer<typeof branchInput>;
-export type SetupInput = z.infer<typeof setupInput>;
-export type OwnerSetupInput = z.infer<typeof ownerSetupInput>;
 export type UserInput = z.infer<typeof userInput>;
 export type StudentCreateInput = z.infer<typeof studentCreateInput>;
 export type StudentPersonInput = z.infer<typeof studentPersonInput>;

@@ -1,9 +1,11 @@
 import { applyD1Migrations, env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_RATE_CHART } from '../src/shared/fees';
-import { Client, sectionId } from './helpers';
+import { verifyPassword } from '../src/worker/core/password';
+import { Client, sectionId, signIn } from './helpers';
 
-const OWNER = { owner_name: 'Prem', username: 'prem', password: 'school-pass-1' };
+const ADMIN = { username: 'admin@sps.com', password: 'admin@123' };
+const NEW_PASSWORD = 'owner-own-pass-1';
 const count = async (table: string) =>
   (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
 
@@ -13,7 +15,7 @@ beforeAll(async () => {
 });
 
 describe('the school that comes with the first release', () => {
-  it('loads the school, both branches, the 2026-27 session and section A everywhere', async () => {
+  it('loads the school, both schools, the 2026-27 session and section A everywhere', async () => {
     const settings = await env.DB.prepare(
       "SELECT key, value FROM settings WHERE key LIKE 'school_%'",
     ).all<{ key: string; value: string }>();
@@ -35,10 +37,29 @@ describe('the school that comes with the first release', () => {
       { name: '2026-27', start_year: 2026, start_month: 4, is_current: 1 },
     ]);
     expect(await count('sections')).toBe(30);
-    expect(await count('users')).toBe(0); // no password is ever loaded with the app
   });
 
-  it('loads exactly the printed fee chart for both branches', async () => {
+  it('loads the first admin login, with only a hash of its password', async () => {
+    const users = await env.DB.prepare(
+      'SELECT username, name, role, active, must_change_password, password_hash FROM users',
+    ).all<{
+      username: string;
+      role: string;
+      must_change_password: number;
+      password_hash: string;
+    }>();
+    expect(users.results).toHaveLength(1);
+    const admin = users.results[0]!;
+    expect(admin).toMatchObject({
+      username: 'admin@sps.com',
+      role: 'admin',
+      must_change_password: 1,
+    });
+    expect(admin.password_hash).not.toContain('admin@123');
+    expect(await verifyPassword('admin@123', admin.password_hash)).toBe(true);
+  });
+
+  it('loads exactly the printed fee chart for both schools', async () => {
     expect(await count('fee_rates')).toBe(60);
     for (const branch of [1, 2]) {
       for (const group of DEFAULT_RATE_CHART) {
@@ -59,62 +80,88 @@ describe('the school that comes with the first release', () => {
   });
 
   it('is safe to run twice: nothing is added or overwritten', async () => {
-    await env.DB.prepare(
-      "UPDATE fee_rates SET monthly = 999 WHERE branch_id = 2 AND class_id = 4 AND admission_type = 'new'",
-    ).run();
+    const before = [
+      await count('fee_rates'),
+      await count('branches'),
+      await count('sections'),
+      await count('users'),
+    ];
     for (const query of env.TEST_SEED[0]!.queries) await env.DB.prepare(query).run();
-    expect(await count('fee_rates')).toBe(60);
-    expect(await count('branches')).toBe(2);
-    expect(await count('sections')).toBe(30);
-    const edited = await env.DB.prepare(
-      "SELECT monthly FROM fee_rates WHERE branch_id = 2 AND class_id = 4 AND admission_type = 'new'",
-    ).first<{ monthly: number }>();
-    expect(edited!.monthly).toBe(999);
-    await env.DB.prepare(
-      "UPDATE fee_rates SET monthly = 800 WHERE branch_id = 2 AND class_id = 4 AND admission_type = 'new'",
-    ).run();
+    expect([
+      await count('fee_rates'),
+      await count('branches'),
+      await count('sections'),
+      await count('users'),
+    ]).toEqual(before);
   });
 });
 
-describe('first visit', () => {
-  let owner: Client;
+describe('first sign-in', () => {
+  let admin: Client;
 
-  it('asks only for the owner login and shows what is ready', async () => {
-    const boot = (await new Client().get('/bootstrap')).data;
-    expect(boot.needs_setup).toBe(true);
-    expect(boot.school.name).toBe('Soni Pariya Public School');
-    expect(boot.preset).toEqual({ branches: ['Kamalganj', 'Kannauj'], session: '2026-27' });
-    const bad = await new Client().post('/setup', {
-      owner_name: 'P',
-      username: 'p',
-      password: 'short',
-    });
-    expect(bad.status).toBe(400);
-  });
-
-  it('creates the owner, signs in, and the school is ready to use', async () => {
-    owner = new Client();
-    expect((await owner.post('/setup', OWNER)).status).toBe(200);
-    const boot = (await owner.get('/bootstrap')).data;
-    expect(boot.user).toMatchObject({ username: 'prem', name: 'Prem', role: 'admin' });
-    expect(boot.branches.map((b: any) => b.code)).toEqual(['KMG', 'KNJ']);
-    expect(boot.sessions.map((s: any) => [s.name, s.is_current])).toEqual([['2026-27', 1]]);
-    expect(boot.sections).toHaveLength(30);
-    expect(boot.modules).toEqual({ fees: true });
-    const log = (await owner.get('/audit')).data.rows.map((r: any) => r.summary);
-    expect(log).toContain('Owner login created');
-  });
-
-  it('closes the setup screen afterwards', async () => {
-    expect((await new Client().post('/setup', OWNER)).status).toBe(403);
+  it('shows the sign-in screen with both schools; there is no sign-up', async () => {
     const boot = (await new Client().get('/bootstrap')).data;
     expect(boot.needs_setup).toBe(false);
-    expect(boot.preset).toBeNull();
+    expect(boot.user).toBeNull();
+    expect(boot.school.name).toBe('Soni Pariya Public School');
+    expect(boot.login_branches).toEqual([
+      { id: 1, name: 'Kamalganj' },
+      { id: 2, name: 'Kannauj' },
+    ]);
+    expect([401, 404]).toContain((await new Client().post('/setup', {})).status);
   });
 
-  it('gives the fee chart to students straight away, per branch', async () => {
+  it('signs the admin in with admin@sps.com / admin@123 and asks for a new password first', async () => {
+    admin = await signIn(ADMIN.username, ADMIN.password, null);
+    const boot = (await admin.get('/bootstrap')).data;
+    expect(boot.user).toMatchObject({
+      username: 'admin@sps.com',
+      role: 'admin',
+      must_change_password: true,
+      all_schools: true,
+      branch_id: null,
+    });
+    expect((await admin.get('/students?session_id=1')).status).toBe(403);
+    expect((await admin.get('/users')).status).toBe(403);
+    const res = await admin.post('/auth/password', {
+      current_password: ADMIN.password,
+      new_password: NEW_PASSWORD,
+    });
+    expect(res.status).toBe(200);
+    expect((await admin.get('/bootstrap')).data.user.must_change_password).toBe(false);
+  });
+
+  it('stops accepting admin@123 once the admin has chosen a new password', async () => {
+    const old = await new Client().post('/auth/login', { ...ADMIN, branch_id: null });
+    expect(old.status).toBe(401);
+    expect((await signIn(ADMIN.username, NEW_PASSWORD, 2)).cookie).toMatch(/^sid=/);
+  });
+
+  it('lets the admin create the other logins', async () => {
+    const res = await admin.post('/users', {
+      username: 'kannauj@sps.com',
+      name: 'Kannauj Accountant',
+      role: 'accountant',
+      branch_ids: [2],
+      password: 'first-pass-1',
+    });
+    expect(res.status).toBe(200);
+    expect(
+      (
+        await new Client().post('/auth/login', {
+          username: 'kannauj@sps.com',
+          password: 'first-pass-1',
+          branch_id: 1,
+        })
+      ).status,
+    ).toBe(403);
+    const acct = await signIn('kannauj@sps.com', 'first-pass-1', 2);
+    expect((await acct.get('/bootstrap')).data.user.must_change_password).toBe(true);
+  });
+
+  it('gives the fee chart to students straight away, per school', async () => {
     const add = async (branch: number, name: string) => {
-      const res = await owner.post('/students', {
+      const res = await admin.post('/students', {
         name,
         session_id: 1,
         enrolment: {
@@ -125,13 +172,13 @@ describe('first visit', () => {
         },
       });
       expect(res.status, JSON.stringify(res.data)).toBe(200);
-      const detail = (await owner.get(`/students/${res.data.id}`)).data;
-      return (await owner.get(`/fees/students/${detail.enrolments[0].id}`)).data;
+      const detail = (await admin.get(`/students/${res.data.id}`)).data;
+      return (await admin.get(`/fees/students/${detail.enrolments[0].id}`)).data;
     };
     const kamalganj = await add(1, 'Kamalganj Kid');
-    expect(kamalganj.due_at_admission).toBe(100 + 3000 + 500 + 800); // Class 5 new, as printed: 4,400
+    expect(kamalganj.due_at_admission).toBe(100 + 3000 + 500 + 800); // Class 5 new, as printed
     expect(kamalganj.position.net).toBe(100 + 3000 + 500 + 800 * 12);
-    await owner.put('/fees/rates', {
+    await admin.put('/fees/rates', {
       session_id: 1,
       branch_ids: [2],
       class_ids: [8],
@@ -159,29 +206,21 @@ describe('first visit', () => {
     const kannauj = await add(2, 'Kannauj Kid');
     expect(kannauj.position.net).toBe(100 + 3000 + 500 + 900 * 12);
     expect(
-      (await owner.get(`/fees/students/${kamalganj.student.enrolment_id}`)).data.position.net,
+      (await admin.get(`/fees/students/${kamalganj.student.enrolment_id}`)).data.position.net,
     ).toBe(kamalganj.position.net);
   });
 
-  it('numbers receipts per branch from the first one', async () => {
-    const list = (await owner.get('/fees/collect?session_id=1&q=Kannauj')).data.rows;
-    const res = await owner.post('/fees/receipts', {
+  it('numbers receipts per school from the first one', async () => {
+    const list = (await admin.get('/fees/collect?session_id=1&q=Kannauj')).data.rows;
+    const res = await admin.post('/fees/receipts', {
       enrolment_id: list[0].enrolment_id,
       date: new Date().toISOString().slice(0, 10),
       settle_amount: 1000,
       mode: 'cash',
     });
     expect(res.status).toBe(200);
-    const receipt = (await owner.get(`/fees/receipts/${res.data.id}`)).data;
+    const receipt = (await admin.get(`/fees/receipts/${res.data.id}`)).data;
     expect(receipt.receipt.receipt_no).toBe('KNJ-00001');
     expect(receipt.branch.name).toBe('Kannauj');
-  });
-
-  it('does nothing if the initial school is loaded again once a login exists', async () => {
-    const before = [await count('branches'), await count('fee_rates'), await count('sections')];
-    for (const query of env.TEST_SEED[0]!.queries) await env.DB.prepare(query).run();
-    expect([await count('branches'), await count('fee_rates'), await count('sections')]).toEqual(
-      before,
-    );
   });
 });

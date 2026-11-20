@@ -182,6 +182,16 @@ a {
   color: inherit;
   font-weight: 600;
 }
+.topbar .school-select {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  margin-left: 0;
+  font-size: 1rem;
+}
+.topbar .brand:empty {
+  display: none;
+}
 .topbar select option {
   color: var(--ink);
   background: var(--card);

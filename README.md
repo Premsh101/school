@@ -25,15 +25,16 @@ npm ci
 npm run dev        # API on :8787, web pages on http://localhost:5173
 ```
 
-Open http://localhost:5173. The school (Kamalganj and Kannauj branches, session 2026-27 and the
-fee chart) is already there; the first visit asks only for the owner's name, username and password.
+Open http://localhost:5173. The school (Kamalganj and Kannauj, session 2026-27 and the fee
+chart) is already there. Sign in with `admin@sps.com` / `admin@123`, choose a school, and set
+a new password when asked. There is no sign-up; the admin creates other logins.
 
 To start with demo data instead (45 students, staff, logins, last year's history), run this on a
 freshly migrated local database before opening the app:
 
 ```bash
 npm run db:migrate
-npm run seed       # sign in as admin / principal / accountant / teacher, password demo12345
+npm run seed       # demo logins: manager@sps.com, kamalganj@sps.com, kannauj@sps.com (demo12345)
 npm run dev        # then, in a second terminal:
 npm run seed:fees  # discounts and receipts from April to today
 ```

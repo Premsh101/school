@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { manageableRoles, ROLE_LABELS, type Role } from '../../shared/permissions';
+import {
+  ROLE_HINTS,
+  ROLE_LABELS,
+  ROLES,
+  seesAllBranches,
+  type Role,
+} from '../../shared/permissions';
 import type { UserRow } from '../../shared/types';
 import { api } from '../app/api';
 import { useBoot } from '../app/boot';
@@ -47,10 +53,13 @@ export function UsersPage() {
                   </span>
                   <span className="sub" style={{ display: 'block' }}>
                     {t(ROLE_LABELS[u.role])}
-                    {u.role !== 'admin' && ` · ${u.branch_ids.map(boot.branchName).join(', ')}`}
+                    {seesAllBranches(u.role)
+                      ? ` · ${t('All schools')}`
+                      : ` · ${u.branch_ids.map(boot.branchName).join(', ')}`}
                   </span>
                 </span>
                 {!u.active && <Badge tone="grey">{t('Switched off')}</Badge>}
+                {!!u.active && !!u.must_change_password && <Badge>{t('Not signed in yet')}</Badge>}
               </button>
             </li>
           ))}
@@ -69,13 +78,12 @@ function UserSheet({ user, onClose }: { user: UserRow | null; onClose: () => voi
   const boot = useBoot();
   const client = useQueryClient();
   const toast = useToast();
-  const roles = manageableRoles(boot.user.role);
+  const schools = boot.myBranches.filter((b) => b.active);
   const [f, setF] = useState({
     name: user?.name ?? '',
     username: user?.username ?? '',
-    role: (user?.role ?? roles[roles.length > 1 ? 2 : 0] ?? 'staff') as Role,
-    branch_ids:
-      user?.branch_ids ?? (boot.activeBranches.length === 1 ? [boot.activeBranches[0]!.id] : []),
+    role: (user?.role ?? 'accountant') as Role,
+    branch_ids: user?.branch_ids ?? (schools.length === 1 ? [schools[0]!.id] : []),
     password: '',
     active: user ? !!user.active : true,
   });
@@ -85,7 +93,7 @@ function UserSheet({ user, onClose }: { user: UserRow | null; onClose: () => voi
       setF((old) => ({ ...old, [key]: value }));
   const save = useMutation({
     mutationFn: () => {
-      const body = { ...f, branch_ids: f.role === 'admin' ? [] : f.branch_ids };
+      const body = { ...f, branch_ids: seesAllBranches(f.role) ? [] : f.branch_ids };
       return user ? api.put(`/users/${user.id}`, body) : api.post('/users', body);
     },
     onSuccess: async () => {
@@ -106,7 +114,7 @@ function UserSheet({ user, onClose }: { user: UserRow | null; onClose: () => voi
       />
       <TextField
         label={t('Username')}
-        hint={t('Small letters and numbers, no spaces')}
+        hint={t('An email like name@sps.com, or small letters and numbers')}
         value={f.username}
         onChange={set('username')}
         error={err.username}
@@ -117,16 +125,17 @@ function UserSheet({ user, onClose }: { user: UserRow | null; onClose: () => voi
       <SelectField
         label={t('Role')}
         value={f.role}
+        hint={t(ROLE_HINTS[f.role])}
         onChange={(v) => set('role')(v as Role)}
-        options={roles.map((r) => ({ value: r, label: t(ROLE_LABELS[r]) }))}
+        options={ROLES.map((r) => ({ value: r, label: t(ROLE_LABELS[r]) }))}
         error={err.role}
       />
-      {f.role !== 'admin' && (
+      {!seesAllBranches(f.role) && (
         <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label" style={{ fontWeight: 600, fontSize: '0.92rem' }}>
-            {t('Branches this person works in')}
+            {t('Schools this accountant works in')}
           </legend>
-          {boot.activeBranches.map((b) => (
+          {schools.map((b) => (
             <Check
               key={b.id}
               label={b.name}
@@ -138,15 +147,19 @@ function UserSheet({ user, onClose }: { user: UserRow | null; onClose: () => voi
               }
             />
           ))}
-          {err.branch_ids && <span className="err">{t('Choose at least one branch')}</span>}
+          {err.branch_ids && <span className="err">{t('Tick at least one school')}</span>}
         </fieldset>
       )}
       <TextField
-        label={user ? t('New password') : t('Password')}
+        label={user ? t('New first password') : t('First password')}
         hint={
           user
-            ? t('Leave empty to keep the current password. A new password signs this person out.')
-            : t('At least 8 characters. Tell it to the person; they can change it later.')
+            ? t(
+                'Leave empty to keep the current password. A new one signs the person out, and they choose their own at the next sign-in.',
+              )
+            : t(
+                'At least 8 characters. Tell it to the person; they must choose their own password the first time they sign in.',
+              )
         }
         type="password"
         value={f.password}

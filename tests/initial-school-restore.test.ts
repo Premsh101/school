@@ -1,6 +1,6 @@
 import { applyD1Migrations, env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { Client, setupSchool } from './helpers';
+import { Client, sectionId, signIn } from './helpers';
 
 const count = async (table: string) =>
   (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
@@ -9,27 +9,56 @@ beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_SEED);
 });
 
-describe('restoring a backup onto a database that came with the school', () => {
-  it('clears the loaded school first, so the backup replaces it completely', async () => {
-    const anon = new Client();
-    expect((await anon.get('/bootstrap')).data.preset).not.toBeNull();
-    const begin = await anon.post('/restore/begin');
-    expect(begin.status).toBe(200);
-    expect(await count('branches')).toBe(0);
-    expect(await count('academic_sessions')).toBe(0);
-    expect(await count('sections')).toBe(0);
-    expect(await count('fee_rates')).toBe(0);
-    expect(await count('classes')).toBe(15); // classes are fixed and stay
-    const boot = (await anon.get('/bootstrap')).data;
-    expect(boot.needs_setup).toBe(true);
-    expect(boot.preset).toBeNull();
+describe('restoring a backup onto a new installation', () => {
+  let admin: Client;
+
+  it('is refused unless the admin is signed in', async () => {
+    expect((await new Client().post('/restore/begin')).status).toBe(403);
+    admin = await signIn('admin@sps.com', 'admin@123', null);
+    // the admin must choose their own password first
+    expect((await admin.post('/restore/begin')).status).toBe(403);
+    await admin.post('/auth/password', {
+      current_password: 'admin@123',
+      new_password: 'owner-own-pass-1',
+    });
   });
 
-  it('then the full first-time setup still works on the emptied database', async () => {
-    const owner = await setupSchool();
-    const boot = (await owner.get('/bootstrap')).data;
-    expect(boot.branches.map((b: any) => b.code)).toEqual(['KMG']);
-    expect(boot.sessions.map((s: any) => s.name)).toEqual(['2026-27']);
-    expect((await owner.get('/fees/rates?session_id=1')).data).toHaveLength(30);
+  it('is refused once a student has been added, so live data is never overwritten', async () => {
+    const res = await admin.post('/students', {
+      name: 'First Kid',
+      session_id: 1,
+      enrolment: { branch_id: 1, class_id: 4, section_id: await sectionId(1, 4) },
+    });
+    expect(res.status).toBe(200);
+    const begin = await admin.post('/restore/begin');
+    expect(begin.status).toBe(403);
+    expect(begin.data.error).toMatch(/before any students are added/);
+    // take the student out again for the next test
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM student_fees'),
+      env.DB.prepare('DELETE FROM enrolments'),
+      env.DB.prepare('DELETE FROM students'),
+    ]);
+  });
+
+  it('clears everything that came with the app, so the backup replaces it completely', async () => {
+    expect((await admin.post('/restore/begin')).status).toBe(200);
+    for (const table of [
+      'branches',
+      'academic_sessions',
+      'sections',
+      'fee_rates',
+      'users',
+      'auth_sessions',
+    ]) {
+      expect(await count(table), table).toBe(0);
+    }
+    expect(await count('classes')).toBe(15); // classes are fixed and stay
+    // with no login left, the app offers only to finish the restore; still no sign-up
+    const boot = (await new Client().get('/bootstrap')).data;
+    expect(boot.needs_setup).toBe(true);
+    expect(boot.user).toBeNull();
+    expect((await new Client().post('/restore/begin')).status).toBe(200);
+    expect([401, 404]).toContain((await new Client().post('/setup', {})).status);
   });
 });

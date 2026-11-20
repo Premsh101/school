@@ -5,12 +5,11 @@ reports. All money is whole rupees. Nothing financial is ever deleted.
 
 ## Who can do what
 
-| Role           | See fees, dashboard, reports | Collect | Edit a student's fees | Cancel a receipt | Edit the rate chart |
-| -------------- | ---------------------------- | ------- | --------------------- | ---------------- | ------------------- |
-| Owner / Admin  | all branches                 | yes     | yes                   | yes              | yes                 |
-| Principal      | own branches                 | yes     | yes                   | yes              | no                  |
-| Accountant     | own branches                 | yes     | yes                   | no               | no                  |
-| Teacher, Staff | no                           | no      | no                    | no               | no                  |
+| Role       | See fees, dashboard, reports  | Collect | Edit a student's fees | Cancel a receipt | Edit the rate chart |
+| ---------- | ----------------------------- | ------- | --------------------- | ---------------- | ------------------- |
+| Admin      | chosen school, or all schools | yes     | yes                   | yes              | yes                 |
+| Management | chosen school, or all schools | yes     | yes                   | yes              | no                  |
+| Accountant | their assigned school         | yes     | yes                   | no               | no                  |
 
 ## Rate chart
 
@@ -123,6 +122,6 @@ The lists, dashboard and reports work the position out in SQL (`positionSql` in
 - Each branch has its own rate chart.
 - The monthly fee is charged for 12 months unless changed for a student.
 - Accountants may edit a student's fees and discounts; every change is in the activity log
-  and the Discounts report.
+  and the Discounts report. Only admin and management cancel receipts.
 - Not built: import of the v1 fees backup (`reference/school-fees-v1/` is not in the
   repository), late fees, SMS.

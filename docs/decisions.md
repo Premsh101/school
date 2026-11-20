@@ -2,6 +2,34 @@
 
 Short, dated notes on technical choices. Newest first.
 
+## 2026-11-20 — Three roles, school chosen at sign-in, shipped admin login
+
+**Owner's decisions:** roles are admin, management and accountant; there is sign-in only, no
+sign-up; the sign-in screen asks for the school; the first admin is `admin@sps.com` with
+password `admin@123`.
+
+- **The admin password is in the repository** as a PBKDF2 hash inside migration 0003. This
+  goes against the brief's "no secrets in the repo" rule, so it is made safe: the login is
+  marked `must_change_password`, and the server refuses every request except "set a new
+  password" until the admin has chosen their own. `admin@123` stops working at that moment.
+  Until then, anyone who knows `admin@123` and the app's address could take the admin login,
+  so the owner should sign in and change it right after the first deploy.
+- **The same first-password rule applies to every login the admin makes** and to passwords
+  the admin resets, so the admin never knows anyone's real password.
+- **The school is part of the sign-in session** (`auth_sessions.branch_id`). Every query is
+  limited through `scopeSql()`/`assertBranch()` exactly as before, now to the chosen school.
+  `null` means all schools and is allowed only for admin and management. If an accountant
+  loses access to the school (or it is closed), their session stops counting.
+- **Roles are checked in code**, not by a database `CHECK`, so later phases can add teacher
+  or staff without rebuilding the `users` table.
+- **Migrations 0001 and 0003 were edited, not added to**, because nothing had been applied to
+  a production database yet (the pull request was not merged). From the first deploy on, any
+  change is a new numbered migration.
+- **Restore** used to need a database with no logins. With the shipped admin there is always a
+  login, so the rule is now: only the signed-in admin, and only before any students exist. It
+  replaces everything, including logins. If a restore is started and not finished, there is
+  no login left and the app shows only "finish restoring", never a sign-up.
+
 ## 2026-11-20 — The school ships with the first release
 
 **Migration `0003_initial_school.sql`** loads the school name and address, the branches
@@ -12,9 +40,8 @@ release through the normal "apply migrations, then deploy" step, with nothing to
 - Every statement is `INSERT OR IGNORE` and guarded by "no login exists yet", so it never
   overwrites or adds to a school that was already set up, and running it twice changes
   nothing. It is a new numbered file; no applied migration was edited.
-- **No password in the repo.** The owner's login is still created on the first visit, by a
-  screen that asks only for name, username and password. On a database without branches the
-  old full setup screen still appears, so setup works whichever way the database arrives.
+- (Superseded the same day: the admin login now ships too, and the setup screen is gone.
+  See the entry above.)
 - **Restore** clears the loaded school when it starts (only possible while there is no login),
   so a backup replaces it completely instead of mixing with it.
 - The fee amounts are written out in the migration and a test compares every row with

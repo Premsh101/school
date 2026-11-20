@@ -2,7 +2,7 @@ import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { todayIST } from '../src/shared/dates';
 import { monthsStarted } from '../src/shared/fees';
-import { Client, sectionId, setupSchool, signIn } from './helpers';
+import { addLogin, Client, sectionId, setupSchool, signIn } from './helpers';
 
 const zero = {
   registration: 0,
@@ -538,37 +538,36 @@ describe('lists, dashboard and reports agree with the student page', () => {
 describe('who can do what', () => {
   let accountant: Client;
   let other: Client;
-  let teacher: Client;
+  let management: Client;
   let e: number;
   beforeAll(async () => {
-    await owner.post('/users', {
+    await addLogin(owner, {
       username: 'acct1',
       name: 'Acct One',
       role: 'accountant',
       branch_ids: [1],
       password: 'accountant-1',
     });
-    await owner.post('/users', {
+    await addLogin(owner, {
       username: 'acct2',
       name: 'Acct Two',
       role: 'accountant',
       branch_ids: [branch2],
       password: 'accountant-2',
     });
-    await owner.post('/users', {
-      username: 'teach1',
-      name: 'Teacher',
-      role: 'teacher',
-      branch_ids: [1],
-      password: 'teacher-11',
+    await addLogin(owner, {
+      username: 'boss',
+      name: 'Manager',
+      role: 'management',
+      password: 'management-1',
     });
-    accountant = await signIn('acct1', 'accountant-1');
-    other = await signIn('acct2', 'accountant-2');
-    teacher = await signIn('teach1', 'teacher-11');
+    accountant = await signIn('acct1', 'accountant-1', 1);
+    other = await signIn('acct2', 'accountant-2', branch2);
+    management = await signIn('boss', 'management-1', null);
     e = await addStudent('Scope Fee', 5);
   });
 
-  it('accountants collect in their own branch only and cannot cancel', async () => {
+  it('accountants collect in their own school only and cannot cancel', async () => {
     const mine = await pay(accountant, e, 300);
     expect(mine.status).toBe(200);
     expect((await pay(other, e, 300)).status).toBe(403);
@@ -606,10 +605,26 @@ describe('who can do what', () => {
     ).toBe(403);
   });
 
-  it('teachers have no access to fees', async () => {
-    expect((await teacher.get('/fees/dashboard?session_id=1')).status).toBe(403);
-    expect((await teacher.get(`/fees/students/${e}`)).status).toBe(403);
-    expect((await pay(teacher, e, 100)).status).toBe(403);
+  it('management sees every school, collects and cancels, but cannot change the rate chart', async () => {
+    const dash = (await management.get('/fees/dashboard?session_id=1')).data;
+    expect(dash.by_branch).toHaveLength(2);
+    const receipt = await pay(management, e, 200);
+    expect(receipt.status).toBe(200);
+    expect(
+      (await management.post(`/fees/receipts/${receipt.data.id}/cancel`, { reason: 'Test' }))
+        .status,
+    ).toBe(200);
+    expect(
+      (
+        await management.put('/fees/rates', {
+          session_id: 1,
+          branch_ids: [1],
+          class_ids: [1],
+          new: zero,
+          old: zero,
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it('answers 404 when the fees module is switched off in Settings', async () => {

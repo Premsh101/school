@@ -9,7 +9,8 @@ For the school owner. No coding needed. It takes about 30 minutes and you do it 
 3. Paste the database's ID into one file on GitHub.
 4. Make an access token on Cloudflare.
 5. Connect GitHub to Cloudflare so the app goes live by itself.
-6. Open the app and set up the school.
+6. Sign in as admin and set your own password.
+7. Add logins for your people and your students.
 
 **What you need before you start:**
 
@@ -120,28 +121,53 @@ If you cannot find the token field in step 8 on the first screen, finish with **
 
 ---
 
-## Step 6. Open the app and create your login
+## Step 6. Sign in for the first time
 
-The school is already loaded with the app, so you do not type it in:
+Everything is already loaded with the app, so you do not type it in:
 
 - the school name and address
-- the branches **Kamalganj** (code `KMG`) and **Kannauj** (code `KNJ`), each with section A in every class
+- the schools **Kamalganj** (code `KMG`) and **Kannauj** (code `KNJ`), each with section A in every class
 - the session **2026-27**, set as the current one
-- the printed 2026-27 fee chart, for both branches
+- the printed 2026-27 fee chart, for both schools
+- the first admin login: **admin@sps.com**, password **admin@123**
 
-Only your own login is missing, because a password must never be kept in the code.
+**Do this step straight after the first deploy.** Until you set your own password, anyone who
+knows `admin@123` could sign in as the admin.
 
-1. Open the `.workers.dev` address from Step 5 in your browser. You should see **Soni Pariya Public School** and the words **Your school is ready**.
-2. Fill in **Your name**, a **Username** (small letters, for example `prem`) and a **Password** of at least 8 characters. Write the password down in a safe place.
-3. Click **Create my login**. You are signed in as the owner. This screen never appears again.
-4. Check the branches. Tap **More**, then **Branches**. Tap a branch to change its address, phone or short code. **The short code is printed on receipt numbers** (`KMG-00001`), so if you want a different code for Kannauj than `KNJ`, change it now, before the first receipt is made.
-5. Check the fees. Tap **More**, then **Fee rate chart**. Use the **Branch** box to switch between Kamalganj and Kannauj. Tap **Edit** on a class group to change any amount for that branch.
-6. Add the people who will use the app. Tap **More**, then **Logins**, then **Add login**. Choose a role (Principal, Accountant, Teacher or Staff), tick their branch, set a password, and tell it to the person.
-7. Add your students. Either tap **Students**, then **Add student** one by one, or tap **More**, then **Import students** to upload an Excel or CSV list. The page has a **Download sample file** button that shows the columns.
+1. Open the `.workers.dev` address from Step 5 in your browser. You see **Sign in to continue**.
+2. In **School**, choose **All schools (admin and management)**.
+3. In **Username** type `admin@sps.com`. In **Password** type `admin@123`. Tap **Sign in**.
+4. You see **Set your own password**. Type `admin@123` in **Password you just used**, then your own new password twice (at least 8 characters). Write it down in a safe place. Tap **Save and continue**.
+5. You are signed in. From now on `admin@123` no longer works; only your new password does.
 
-Each student gets their fees copied from their branch's chart as soon as they are added.
+---
 
-**If you have a backup file from before:** on the first screen, tap **I have a backup file to restore** instead of creating a login. The school that came with the app is replaced completely by what is in your backup.
+## Step 7. Set up the school for daily use
+
+1. **Check the schools.** Tap **More**, then **Branches**. Tap a school to add its address and phone (they print on receipts). The short code is printed on receipt numbers (`KMG-00001`, `KNJ-00001`).
+2. **Check the fees.** Tap **More**, then **Fee rate chart**. Use the **Branch** box to switch between Kamalganj and Kannauj. Tap **Edit** on a class group to change any amount for that school.
+3. **Make logins for your people.** Tap **More**, then **Logins**, then **Add login**:
+   - **Name** and **Username** (an email like `sunita@sps.com` is fine).
+   - **Role**:
+     - **Management**: students, staff and fees in every school.
+     - **Accountant**: fees in the schools you tick. Tick Kamalganj, Kannauj, or both.
+     - **Admin**: everything, including logins and settings. Give this only to the owner.
+   - **First password**: tell it to the person. When they sign in the first time, they must choose their own password, so you never know it.
+   - Tap **Save**.
+4. **Add your students.** Either tap **Students**, then **Add student** one by one, or tap **More**, then **Import students** to upload an Excel or CSV list. The page has a **Download sample file** button that shows the columns.
+
+Each student gets their fees copied from their school's chart as soon as they are added.
+
+There is no sign-up button anywhere: only the admin can make logins. If someone forgets their password, open **Logins**, tap their name, type a new first password and save.
+
+### How signing in works for everyone
+
+- The sign-in screen asks for the **School**, then username and password.
+- People see **only the school they chose**: its students, fees, receipts and reports.
+- **Admin and management** can choose **All schools**, and can change school any time from the box at the top of the screen.
+- **Accountants** can only choose a school you ticked for them. If they pick another school, the app says they are not assigned to it.
+
+**If you have a backup file from before:** sign in as admin, then tap **More**, **Backup**, and use **Restore a backup** before adding any students. Everything that came with the app, including logins, is replaced by what is in the backup.
 
 ---
 

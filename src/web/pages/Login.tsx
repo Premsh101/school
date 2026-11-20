@@ -2,15 +2,57 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../app/api';
 import { t } from '../app/i18n';
-import { Button, ErrorNote, TextField } from '../components/ui';
+import { Button, ErrorNote, fieldErrors, SelectField, TextField } from '../components/ui';
 
-export function LoginPage({ school }: { school: { name: string; logo: string } }) {
+const ALL = 'all';
+const LAST_SCHOOL = 'last-school';
+
+function lastSchool(): string {
+  try {
+    return localStorage.getItem(LAST_SCHOOL) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Sign in. There is no sign-up: the admin creates every login. The person also picks the
+ * school to work in, and sees only that school's data. "All schools" is for admin and
+ * management; the server checks every choice.
+ */
+export function LoginPage({
+  school,
+  branches,
+}: {
+  school: { name: string; logo: string };
+  branches: { id: number; name: string }[];
+}) {
   const client = useQueryClient();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const remembered = lastSchool();
+  const [branch, setBranch] = useState<string>(
+    remembered === ALL || branches.some((b) => String(b.id) === remembered)
+      ? remembered
+      : branches.length === 1
+        ? String(branches[0]!.id)
+        : '',
+  );
   const login = useMutation({
-    mutationFn: () => api.post('/auth/login', { username, password }),
-    onSuccess: () => client.invalidateQueries(),
+    mutationFn: () =>
+      api.post('/auth/login', {
+        username,
+        password,
+        branch_id: branch === ALL ? null : Number(branch),
+      }),
+    onSuccess: () => {
+      try {
+        localStorage.setItem(LAST_SCHOOL, branch);
+      } catch {
+        /* private mode: the choice is simply not remembered */
+      }
+      return client.invalidateQueries();
+    },
   });
   return (
     <div className="center-page">
@@ -34,12 +76,25 @@ export function LoginPage({ school }: { school: { name: string; logo: string } }
         <p className="muted" style={{ textAlign: 'center' }}>
           {t('Sign in to continue')}
         </p>
+        <SelectField
+          label={t('School')}
+          value={branch}
+          placeholder={t('Choose your school')}
+          onChange={setBranch}
+          options={[
+            ...branches.map((b) => ({ value: String(b.id), label: b.name })),
+            ...(branches.length > 1
+              ? [{ value: ALL, label: t('All schools (admin and management)') }]
+              : []),
+          ]}
+        />
         <TextField
           label={t('Username')}
           value={username}
           onChange={setUsername}
           autoComplete="username"
           autoCapitalize="none"
+          inputMode="email"
           required
         />
         <TextField
@@ -51,12 +106,91 @@ export function LoginPage({ school }: { school: { name: string; logo: string } }
           required
         />
         <ErrorNote error={login.error} />
-        <Button type="submit" variant="primary" block busy={login.isPending}>
+        <Button type="submit" variant="primary" block busy={login.isPending} disabled={!branch}>
           {t('Sign in')}
         </Button>
         <p className="muted small">
-          {t('Forgot your password? Ask the admin to set a new one for you.')}
+          {t(
+            'No login yet, or forgot your password? Ask the admin; logins are made by the admin only.',
+          )}
         </p>
+      </form>
+    </div>
+  );
+}
+
+/** First sign-in with a password someone else chose: the person must set their own. */
+export function NewPasswordPage({ name }: { name: string }) {
+  const client = useQueryClient();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [again, setAgain] = useState('');
+  const save = useMutation({
+    mutationFn: () => {
+      if (next !== again)
+        throw new Error(t('The two new passwords are not the same. Type them again.'));
+      return api.post('/auth/password', { current_password: current, new_password: next });
+    },
+    onSuccess: () => client.invalidateQueries(),
+  });
+  const logout = useMutation({
+    mutationFn: () => api.post('/auth/logout'),
+    onSuccess: () => {
+      client.clear();
+      window.location.assign('/');
+    },
+  });
+  const err = fieldErrors(save.error);
+  return (
+    <div className="center-page">
+      <form
+        className="card stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+      >
+        <h1 className="stamp-title">{t('Set your own password')}</h1>
+        <p className="muted">
+          {t(
+            'Welcome, {name}. You signed in with a password given to you. Choose your own now; only you will know it.',
+            { name },
+          )}
+        </p>
+        <TextField
+          label={t('Password you just used')}
+          type="password"
+          value={current}
+          onChange={setCurrent}
+          error={err.current_password}
+          autoComplete="current-password"
+          required
+        />
+        <TextField
+          label={t('New password')}
+          hint={t('At least 8 characters. Write it down somewhere safe.')}
+          type="password"
+          value={next}
+          onChange={setNext}
+          error={err.new_password}
+          autoComplete="new-password"
+          required
+        />
+        <TextField
+          label={t('New password again')}
+          type="password"
+          value={again}
+          onChange={setAgain}
+          autoComplete="new-password"
+          required
+        />
+        <ErrorNote error={save.error} />
+        <Button type="submit" variant="primary" block busy={save.isPending}>
+          {t('Save and continue')}
+        </Button>
+        <Button block busy={logout.isPending} onClick={() => logout.mutate()}>
+          {t('Sign out')}
+        </Button>
       </form>
     </div>
   );

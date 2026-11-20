@@ -11,6 +11,10 @@ interface Boot extends Bootstrap {
   session: AcademicSession | undefined;
   setSessionId: (id: number) => void;
   activeBranches: Branch[];
+  /** Every school this person may switch to (for admin: all schools). */
+  myBranches: Branch[];
+  /** The school chosen at sign-in, or null for all schools. */
+  currentBranch: Branch | null;
   branchName: (id: number) => string;
   className: (id: number) => string;
   sectionsOf: (branchId: number, classId: number) => Section[];
@@ -54,7 +58,10 @@ export function BootProvider({ data, children }: { data: Bootstrap; children: Re
       session,
       setSessionId,
       activeBranches: data.branches.filter((b) => b.active),
-      branchName: (id) => data.branches.find((b) => b.id === id)?.name ?? t('Unknown branch'),
+      myBranches: data.my_branches,
+      currentBranch: data.branches.find((b) => b.id === user.branch_id) ?? null,
+      branchName: (id) =>
+        [...data.my_branches, ...data.branches].find((b) => b.id === id)?.name ?? t('Other school'),
       className: (id) => data.classes.find((c) => c.id === id)?.name ?? '',
       sectionsOf: (branchId, classId) =>
         data.sections.filter((s) => s.branch_id === branchId && s.class_id === classId && s.active),

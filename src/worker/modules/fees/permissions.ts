@@ -8,8 +8,8 @@ export const FEES_PERMISSIONS: Permission[] = [
   'fees.rates.edit', // the rate chart
 ];
 
-/** The admin has every permission. Accountants work the counter; cancelling needs a principal. */
+/** The admin has every permission. Accountants work the counter; only admin and management cancel a receipt. */
 export const FEES_ROLE_PERMISSIONS: Partial<Record<Role, Permission[]>> = {
-  principal: ['fees.view', 'fees.collect', 'fees.edit', 'fees.cancel'],
+  management: ['fees.view', 'fees.collect', 'fees.edit', 'fees.cancel'],
   accountant: ['fees.view', 'fees.collect', 'fees.edit'],
 };

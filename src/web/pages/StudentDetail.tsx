@@ -120,7 +120,7 @@ export function StudentDetailPage() {
                   {t(link.label)}
                 </Link>
               ))}
-              {canEdit && boot.user.branch_ids.includes(e.branch_id) && (
+              {canEdit && boot.branches.some((b) => b.id === e.branch_id) && (
                 <Button
                   small
                   onClick={() => setEditing(e)}

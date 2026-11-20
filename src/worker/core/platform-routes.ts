@@ -3,7 +3,8 @@ import type { AuditRow, Paged } from '../../shared/types';
 import type { AppEnv } from '../env';
 import { modules } from '../modules';
 import { audit } from './audit';
-import { requirePermission } from './auth';
+import { can } from '../../shared/permissions';
+import { currentUser, requirePermission } from './auth';
 import { AppError } from './errors';
 import { newToken } from './password';
 
@@ -90,22 +91,39 @@ platformRoutes.get('/backup/:table', requirePermission('backup.manage'), async (
 
 export const restoreRoutes = new Hono<AppEnv>();
 
+/**
+ * Starts a restore. Allowed only before the school has any students, so live data can never be
+ * overwritten by mistake: by the signed-in admin on a new installation, or by anyone when no
+ * login exists at all (a restore that was started and not finished).
+ */
 restoreRoutes.post('/restore/begin', async (c) => {
   const db = c.env.DB;
-  const users = await db.prepare('SELECT COUNT(*) AS n FROM users').first<{ n: number }>();
-  if (users!.n > 0) {
-    throw new AppError(
-      403,
-      'A backup can only be restored into an empty database. This one already has data.',
-    );
+  const [users, students] = await db.batch([
+    db.prepare('SELECT COUNT(*) AS n FROM users'),
+    db.prepare('SELECT COUNT(*) AS n FROM students'),
+  ]);
+  const noLogins = (users!.results[0] as { n: number }).n === 0;
+  if (!noLogins) {
+    const user = await currentUser(c);
+    if (!user || user.must_change_password || !can(user.role, 'backup.manage')) {
+      throw new AppError(403, 'Only the admin can restore a backup. Sign in as the admin first.');
+    }
+    if ((students!.results[0] as { n: number }).n > 0) {
+      throw new AppError(
+        403,
+        'A backup can only be restored before any students are added, so that live data is never overwritten.',
+      );
+    }
   }
   const token = newToken();
-  // The school loaded with the app (branches, session, fee chart) is cleared first, so the
-  // backup replaces it completely instead of mixing with it. Nothing else can be in the
-  // database yet: there is no login.
+  // Everything that came with the app (school, branches, session, fee chart, the admin login)
+  // is cleared first, so the backup replaces it completely instead of mixing with it. The
+  // logins in the backup are the ones to use afterwards. Classes are fixed and stay.
   const keep = ['classes', 'audit_log'];
   const clear = [...backupTables()].reverse().filter((t) => !keep.includes(t));
   await db.batch([
+    db.prepare('DELETE FROM auth_sessions'),
+    db.prepare('DELETE FROM login_attempts'),
     ...clear.map((t) => db.prepare(`DELETE FROM ${t}`)),
     db
       .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('restore_token', ?)")

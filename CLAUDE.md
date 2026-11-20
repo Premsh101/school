@@ -125,18 +125,27 @@ Every module exports a manifest so the shell can show it without hard-coding:
 
 **Sign-in and roles**
 - The school itself ships with the first release as migration `0003_initial_school.sql`:
-  name, branches Kamalganj (KMG) and Kannauj (KNJ), session 2026-27 (current), section A in
-  every class, and the printed 2026-27 fee chart for both branches. No password is ever
-  stored in the repo, so the first visit shows a one-time setup screen that creates only
-  the owner account. After that, the setup route is closed.
-- Username + password; session token in an httpOnly, Secure, SameSite=Lax cookie;
-  sessions stored in D1 with expiry; sign out everywhere when a password changes.
-- Roles, each a set of permissions:
-  - **Owner/Admin**: everything, all branches.
-  - **Principal**: everything in their branch(es) except school settings.
-  - **Accountant**: fees in their branch(es).
-  - **Teacher**: own classes and subjects (attendance, lectures, own leave).
-  - **Staff**: own leave and attendance only.
+  name, schools (branches) Kamalganj (KMG) and Kannauj (KNJ), session 2026-27 (current),
+  section A in every class, the printed 2026-27 fee chart for both schools, and the first
+  admin login `admin@sps.com` / `admin@123` (owner's decision, 2026-11-20). Only a hash is
+  stored, and the admin must choose a new password at the first sign-in.
+- **Sign in only, no sign-up.** The admin creates every other login under Logins. A new login
+  (or a password the admin resets) is a first password only: the person must choose their own
+  at the first sign-in before they can do anything else.
+- **The sign-in screen asks for the school.** Everything the person sees is limited to that
+  school. Admin and management may also choose "All schools" and can switch school from the
+  top bar; an accountant can only choose a school assigned to them.
+- Username (an email like `name@sps.com` is fine) + password; session token in an httpOnly,
+  Secure, SameSite=Lax cookie; sessions stored in D1 with expiry, holding the chosen school;
+  sign out everywhere when a password changes.
+- Three roles (owner's decision, 2026-11-20):
+  - **Admin**: everything, all schools; the only role that creates logins, edits branches,
+    sessions, settings and the fee rate chart, sees the activity log and takes backups.
+  - **Management**: the daily work of all schools: students, import, promotion, staff,
+    sections, fees (collect, edit student fees, cancel receipts).
+  - **Accountant**: fees in their assigned school(s); can look students up but not edit them.
+  - Later phases (attendance, lectures, leave) may add teacher and staff roles; roles are
+    checked in code, so adding one needs no table rebuild.
 - Every API route checks permission **and** branch scope on the server.
 - Rate-limit failed sign-ins.
 
@@ -218,7 +227,7 @@ differ from Kamalganj; a new branch starts with a copy.
 - Payment can't exceed pending. Receipt date can't be in the future.
 - Receipt number = branch code + running number, e.g. `KMG-00163`, unique.
 - Payment modes: Cash, UPI, Bank, Cheque, with reference number.
-- Cancel receipt (admin/principal only) with a reason; balance recalculates.
+- Cancel receipt (admin/management only) with a reason; balance recalculates.
 - A student marked Left owes nothing further; what they paid stays in collections.
 - Late fee: not in v1; design so it can be added as another charge type later.
 
@@ -233,7 +242,7 @@ differ from Kamalganj; a new branch starts with a copy.
 - **Add/edit student fees**: per-fee rows showing fee, discount type/value, and
   what the student pays; totals; due at admission.
 - **Rate chart** editor per session.
-- **Dashboard** (admin sees all branches or one; others their branch):
+- **Dashboard** (for the school chosen at sign-in, or all schools for admin/management):
   collected vs total, overdue now, due later, today / last 7 days / this month,
   collection by month (session), last 14 days, payment mode split, branch
   comparison, class-wise position, largest dues with phone, latest receipts,

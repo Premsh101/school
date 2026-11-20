@@ -3,8 +3,9 @@
 //
 //   npm run db:migrate && npm run seed
 //
-// It writes seed/.seed.sql and loads it into the LOCAL database only. Run it on an empty
-// database. Never use this against production.
+// It writes seed/.seed.sql and loads it into the LOCAL database only, after the migrations
+// (which already load the school, both schools, the fee chart and the admin login).
+// Run it once on a freshly migrated database. Never use this against production.
 import { pbkdf2Sync, randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 
@@ -47,49 +48,57 @@ sql.push(
 const LAST = "(SELECT id FROM academic_sessions WHERE name = '2025-26')";
 const THIS = "(SELECT id FROM academic_sessions WHERE name = '2026-27')";
 
+// The admin login admin@sps.com comes with migration 0003. For local demos it keeps the
+// password admin@123 and is not asked to change it. The other demo logins use demo12345.
+sql.push("UPDATE users SET must_change_password = 0 WHERE username = 'admin@sps.com';");
 const users = [
-  { id: 1, username: 'admin', name: 'Owner', role: 'admin', branches: [] },
-  { id: 2, username: 'principal', name: 'Meena Sharma', role: 'principal', branches: [1] },
-  { id: 3, username: 'accountant', name: 'Sunita Yadav', role: 'accountant', branches: [1] },
-  { id: 4, username: 'teacher', name: 'Rakesh Gupta', role: 'teacher', branches: [1] },
-  { id: 5, username: 'principal2', name: 'Anil Dubey', role: 'principal', branches: [2] },
+  { username: 'manager@sps.com', name: 'Meena Sharma', role: 'management', branches: [] },
+  { username: 'kamalganj@sps.com', name: 'Sunita Yadav', role: 'accountant', branches: [1] },
+  { username: 'kannauj@sps.com', name: 'Anil Dubey', role: 'accountant', branches: [2] },
 ];
+const userId = (username) => `(SELECT id FROM users WHERE username = '${username}')`;
 for (const u of users) {
   insert('users', {
-    id: u.id,
     username: u.username,
     name: u.name,
     password_hash: hash('demo12345'),
     role: u.role,
     active: 1,
+    must_change_password: 0,
     created_at: now,
     updated_at: now,
   });
-  for (const b of u.branches) insert('user_branches', { user_id: u.id, branch_id: b });
+  for (const b of u.branches) {
+    sql.push(
+      `INSERT INTO user_branches (user_id, branch_id) VALUES (${userId(u.username)}, ${b});`,
+    );
+  }
 }
 
 const staff = [
-  ['Meena Sharma', 'Principal', 1, 0, 2],
-  ['Sunita Yadav', 'Accountant', 1, 0, 3],
-  ['Rakesh Gupta', 'Teacher', 1, 1, 4],
+  ['Meena Sharma', 'Manager', 1, 0, 'manager@sps.com'],
+  ['Sunita Yadav', 'Accountant', 1, 0, 'kamalganj@sps.com'],
+  ['Rakesh Gupta', 'Teacher', 1, 1, null],
   ['Kavita Mishra', 'Teacher', 1, 1, null],
   ['Ramesh Pal', 'Peon', 1, 0, null],
-  ['Anil Dubey', 'Principal', 2, 0, 5],
+  ['Anil Dubey', 'Accountant', 2, 0, 'kannauj@sps.com'],
   ['Shabnam Bano', 'Teacher', 2, 1, null],
 ];
-staff.forEach(([name, designation, branch_id, is_teaching, user_id], i) =>
-  insert('staff', {
-    name,
-    phone: `98${String(10000000 + i * 137)}`,
-    designation,
-    branch_id,
-    joining_date: `20${18 + (i % 6)}-07-01`,
-    is_teaching,
-    user_id,
-    active: 1,
-    created_at: now,
-    updated_at: now,
-  }),
+staff.forEach(([name, designation, branch_id, is_teaching, login], i) =>
+  sql.push(
+    `INSERT INTO staff (name, phone, designation, branch_id, joining_date, is_teaching, user_id, active, created_at, updated_at) VALUES (${[
+      q(name),
+      q(`98${String(10000000 + i * 137)}`),
+      q(designation),
+      branch_id,
+      q(`20${18 + (i % 6)}-07-01`),
+      is_teaching,
+      login ? userId(login) : 'NULL',
+      1,
+      q(now),
+      q(now),
+    ].join(', ')});`,
+  ),
 );
 
 const boys = [
@@ -210,4 +219,6 @@ insert('audit_log', {
 
 writeFileSync(new URL('./.seed.sql', import.meta.url), sql.join('\n') + '\n');
 console.log(`Wrote seed/.seed.sql: ${id} students, ${staff.length} staff, ${users.length} logins.`);
-console.log('Sign in as admin, principal, accountant or teacher. Password for all: demo12345');
+console.log(
+  'Sign in as admin@sps.com (password admin@123), or manager@sps.com, kamalganj@sps.com, kannauj@sps.com (password demo12345).',
+);

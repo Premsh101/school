@@ -39,16 +39,24 @@ export interface Me {
   name: string;
   role: Role;
   permissions: string[];
-  /** Branch IDs the user may work in. */
-  branch_ids: number[];
+  /** The school chosen at sign-in; null = all schools (admin and management only). */
+  branch_id: number | null;
+  /** True for roles that may choose "All schools". */
+  all_schools: boolean;
+  /** Must set a new password before doing anything else. */
+  must_change_password: boolean;
 }
 export interface Bootstrap {
+  /** True only when no login exists at all (an unfinished restore); the app then offers restore. */
   needs_setup: boolean;
-  /** Set when the school, branches, session and fee chart were loaded with the app. */
-  preset: { branches: string[]; session: string } | null;
   user: Me | null;
+  /** Schools shown on the sign-in screen. */
+  login_branches: { id: number; name: string }[];
   school: { name: string; address: string; logo: string };
+  /** The schools in view right now: the chosen school, or every school the user may see. */
   branches: Branch[];
+  /** Every school the user may switch to (for admin: all schools). */
+  my_branches: Branch[];
   sessions: AcademicSession[];
   classes: SchoolClass[];
   sections: Section[];
@@ -61,6 +69,7 @@ export interface UserRow {
   name: string;
   role: Role;
   active: number;
+  must_change_password: number;
   branch_ids: number[];
 }
 export interface StudentListRow {

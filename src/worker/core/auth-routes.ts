@@ -1,19 +1,28 @@
 import { Hono } from 'hono';
-import { sessionName, todayIST } from '../../shared/dates';
-import { CORE_PERMISSIONS, can } from '../../shared/permissions';
-import { loginInput, ownerSetupInput, passwordChangeInput, setupInput } from '../../shared/schemas';
+import { todayIST } from '../../shared/dates';
+import { CORE_PERMISSIONS, can, seesAllBranches } from '../../shared/permissions';
+import { branchSwitchInput, loginInput, passwordChangeInput } from '../../shared/schemas';
 import type { AcademicSession, Bootstrap, Branch, SchoolClass, Section } from '../../shared/types';
-import type { AppEnv } from '../env';
+import type { AppEnv, Ctx } from '../env';
 import { modules } from '../modules';
 import { audit } from './audit';
-import { clearSessionCookie, currentUser, requireUser, scopeSql, startSession } from './auth';
-import { AppError, parse } from './errors';
+import {
+  clearSessionCookie,
+  currentUser,
+  requireUser,
+  schoolChoiceProblem,
+  scopeSql,
+  startSession,
+} from './auth';
+import { AppError, notFound, parse } from './errors';
 import { hashPassword, needsRehash, verifyPassword } from './password';
 
 export const MAX_FAILS_PER_USERNAME = 5;
 export const MAX_FAILS_PER_IP = 30;
 const WINDOW_SECONDS = 15 * 60;
 
+// There is no sign-up. The first admin login comes with the app (migration 0003) and the
+// admin creates every other login under Logins.
 export const authRoutes = new Hono<AppEnv>();
 
 /** Everything the app shell needs in one call: who is signed in and the school's structure. */
@@ -22,10 +31,11 @@ authRoutes.get('/bootstrap', async (c) => {
   const user = await currentUser(c);
   const base: Bootstrap = {
     needs_setup: false,
-    preset: null,
     user: null,
+    login_branches: [],
     school: { name: '', address: '', logo: '' },
     branches: [],
+    my_branches: [],
     sessions: [],
     classes: [],
     sections: [],
@@ -33,37 +43,33 @@ authRoutes.get('/bootstrap', async (c) => {
     today: todayIST(),
   };
   if (!user) {
-    const [users, settings, branchNames, current] = await db.batch<{
+    const [users, settings, branches] = await db.batch<{
       n?: number;
       key?: string;
       value?: string;
+      id?: number;
       name?: string;
     }>([
       db.prepare('SELECT COUNT(*) AS n FROM users'),
       db.prepare("SELECT key, value FROM settings WHERE key IN ('school_name', 'logo')"),
-      db.prepare('SELECT name FROM branches ORDER BY id'),
-      db.prepare('SELECT name FROM academic_sessions WHERE is_current = 1'),
+      db.prepare('SELECT id, name FROM branches WHERE active = 1 ORDER BY id'),
     ]);
     const map = Object.fromEntries(settings!.results.map((r) => [r.key, r.value]));
-    const needsSetup = users!.results[0]!.n === 0;
     return c.json<Bootstrap>({
       ...base,
-      needs_setup: needsSetup,
-      preset:
-        needsSetup && branchNames!.results.length > 0
-          ? {
-              branches: branchNames!.results.map((r) => r.name!),
-              session: current!.results[0]?.name ?? '',
-            }
-          : null,
+      needs_setup: users!.results[0]!.n === 0,
+      login_branches: branches!.results.map((b) => ({ id: b.id!, name: b.name! })),
       school: { name: map.school_name ?? '', address: '', logo: map.logo ?? '' },
     });
   }
-  const [settings, branches, sessions, classes, sections] = await db.batch([
+  const mine = seesAllBranches(user.role)
+    ? ''
+    : ` AND b.id IN (${user.assigned_branch_ids.map(Number).join(',') || 0})`;
+  const branchCols = 'SELECT id, name, code, address, phone, active FROM branches b WHERE 1';
+  const [settings, branches, myBranches, sessions, classes, sections] = await db.batch([
     db.prepare('SELECT key, value FROM settings'),
-    db.prepare(
-      `SELECT id, name, code, address, phone, active FROM branches b WHERE 1 ${scopeSql(user, 'b.id')} ORDER BY id`,
-    ),
+    db.prepare(`${branchCols} ${scopeSql(user, 'b.id')} ORDER BY id`),
+    db.prepare(`${branchCols} ${mine} ORDER BY id`),
     db.prepare(
       'SELECT id, name, start_year, start_month, is_current FROM academic_sessions ORDER BY start_year DESC',
     ),
@@ -75,7 +81,6 @@ authRoutes.get('/bootstrap', async (c) => {
   const map = Object.fromEntries(
     (settings!.results as { key: string; value: string }[]).map((r) => [r.key, r.value]),
   );
-  const allBranches = branches!.results as Branch[];
   const permissions = [...CORE_PERMISSIONS, ...modules.flatMap((m) => m.permissions)].filter((p) =>
     can(user.role, p),
   );
@@ -87,14 +92,17 @@ authRoutes.get('/bootstrap', async (c) => {
       name: user.name,
       role: user.role,
       permissions,
-      branch_ids: allBranches.map((b) => b.id),
+      branch_id: user.session_branch_id,
+      all_schools: seesAllBranches(user.role),
+      must_change_password: user.must_change_password,
     },
     school: {
       name: map.school_name ?? '',
       address: map.school_address ?? '',
       logo: map.logo ?? '',
     },
-    branches: allBranches,
+    branches: branches!.results as Branch[],
+    my_branches: myBranches!.results as Branch[],
     sessions: sessions!.results as AcademicSession[],
     classes: classes!.results as SchoolClass[],
     sections: sections!.results as Section[],
@@ -102,88 +110,26 @@ authRoutes.get('/bootstrap', async (c) => {
   });
 });
 
-/**
- * One-time setup, closed afterwards. When the school, branches, session and fee chart were
- * loaded with the app (migration 0003), it creates only the owner's login. On an empty
- * database it also creates the school, the first branch and the first session.
- */
-authRoutes.post('/setup', async (c) => {
+/** Checks the chosen school exists, is open and is one the person may work in. */
+async function checkSchoolChoice(
+  c: Ctx,
+  person: { id: number; role: Parameters<typeof seesAllBranches>[0] },
+  branchId: number | null,
+): Promise<void> {
   const db = c.env.DB;
-  const body = await c.req.json();
-  const [userCount, branchCount] = await db.batch([
-    db.prepare('SELECT COUNT(*) AS n FROM users'),
-    db.prepare('SELECT COUNT(*) AS n FROM branches'),
+  const [branch, assigned] = await db.batch([
+    db.prepare('SELECT active FROM branches WHERE id = ?').bind(branchId ?? 0),
+    db.prepare('SELECT branch_id FROM user_branches WHERE user_id = ?').bind(person.id),
   ]);
-  if ((userCount!.results[0] as { n: number }).n > 0) {
-    throw new AppError(403, 'Setup is already done. Please sign in.');
+  if (branchId !== null) {
+    const row = branch!.results[0] as { active: number } | undefined;
+    if (!row) throw notFound('School');
+    if (!row.active) throw new AppError(400, 'This school is closed. Choose another school.');
   }
-  const now = new Date().toISOString();
-  // The NOT EXISTS guard keeps setup one-time even if two people submit it together.
-  const ownerInsert = (username: string, name: string, hash: string) =>
-    db
-      .prepare(
-        `INSERT INTO users (username, name, password_hash, role, active, created_at, updated_at)
-         SELECT ?, ?, ?, 'admin', 1, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)`,
-      )
-      .bind(username, name, hash, now, now);
-  let username: string;
-  let results: D1Result[];
-
-  if ((branchCount!.results[0] as { n: number }).n > 0) {
-    const input = parse(ownerSetupInput, body);
-    username = input.username;
-    results = await db.batch([
-      ownerInsert(input.username, input.owner_name, await hashPassword(input.password)),
-      db.prepare("DELETE FROM settings WHERE key LIKE 'restore_token%'"),
-      db
-        .prepare(
-          `INSERT INTO audit_log (at, user_id, user_name, action, entity, summary)
-           VALUES (?, (SELECT id FROM users WHERE username = ?), ?, 'create', 'user', 'Owner login created')`,
-        )
-        .bind(now, input.username, input.owner_name),
-    ]);
-  } else {
-    const input = parse(setupInput, body);
-    username = input.username;
-    results = await db.batch([
-      ownerInsert(input.username, input.owner_name, await hashPassword(input.password)),
-      db
-        .prepare(
-          'INSERT INTO branches (name, code, address, phone, active, created_at) VALUES (?, ?, ?, ?, 1, ?)',
-        )
-        .bind(input.branch.name, input.branch.code, input.branch.address, input.branch.phone, now),
-      db.prepare(
-        "INSERT INTO sections (branch_id, class_id, name) SELECT (SELECT MAX(id) FROM branches), id, 'A' FROM classes",
-      ),
-      db
-        .prepare(
-          'INSERT INTO academic_sessions (name, start_year, start_month, is_current, created_at) VALUES (?, ?, 4, 1, ?)',
-        )
-        .bind(sessionName(input.session_start_year), input.session_start_year, now),
-      db
-        .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('school_name', ?)")
-        .bind(input.school_name),
-      // Modules prepare the first session too, e.g. fees fills in the rate chart.
-      ...modules.flatMap(
-        (m) => m.onSessionOpened?.(c, null, { start_year: input.session_start_year }) ?? [],
-      ),
-      db.prepare("DELETE FROM settings WHERE key LIKE 'restore_token%'"),
-      db
-        .prepare(
-          `INSERT INTO audit_log (at, user_id, user_name, action, entity, summary)
-           VALUES (?, (SELECT id FROM users WHERE username = ?), ?, 'create', 'school', 'School set up')`,
-        )
-        .bind(now, input.username, input.owner_name),
-    ]);
-  }
-  if (!results[0]!.meta.changes) throw new AppError(403, 'Setup is already done. Please sign in.');
-  const owner = await db
-    .prepare('SELECT id FROM users WHERE username = ?')
-    .bind(username)
-    .first<{ id: number }>();
-  await (await startSession(c, owner!.id)).run();
-  return c.json({ ok: true });
-});
+  const ids = (assigned!.results as { branch_id: number }[]).map((r) => r.branch_id);
+  const problem = schoolChoiceProblem(person.role, ids, branchId);
+  if (problem) throw new AppError(403, problem, { branch_id: problem });
+}
 
 authRoutes.post('/auth/login', async (c) => {
   const db = c.env.DB;
@@ -202,7 +148,7 @@ authRoutes.post('/auth/login', async (c) => {
       .prepare('SELECT COUNT(*) AS n, MIN(at) AS first FROM login_attempts WHERE ip = ? AND at > ?')
       .bind(ip, since),
     db
-      .prepare('SELECT id, name, password_hash, active FROM users WHERE username = ?')
+      .prepare('SELECT id, name, role, password_hash, active FROM users WHERE username = ?')
       .bind(username),
   ]);
   const nameFails = byName!.results[0] as { n: number; first: number | null };
@@ -216,7 +162,7 @@ authRoutes.post('/auth/login', async (c) => {
     );
   }
   const user = userRows!.results[0] as
-    { id: number; name: string; password_hash: string; active: number } | undefined;
+    { id: number; name: string; role: 'admin'; password_hash: string; active: number } | undefined;
   // Unknown usernames skip the hash; the attempt limit above is what stops guessing.
   const ok = user ? await verifyPassword(input.password, user.password_hash) : false;
   if (!user || !ok || !user.active) {
@@ -230,8 +176,9 @@ authRoutes.post('/auth/login', async (c) => {
       throw new AppError(403, 'This login has been switched off. Ask the admin to switch it on.');
     throw new AppError(401, 'Wrong username or password. Check both and try again.');
   }
+  await checkSchoolChoice(c, user, input.branch_id);
   const statements = [
-    await startSession(c, user.id),
+    await startSession(c, user.id, input.branch_id),
     db.prepare('DELETE FROM login_attempts WHERE username = ?').bind(username),
     db.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').bind(now),
   ];
@@ -243,6 +190,17 @@ authRoutes.post('/auth/login', async (c) => {
     );
   }
   await db.batch(statements);
+  return c.json({ ok: true });
+});
+
+/** Switches the school being worked in, without signing in again. */
+authRoutes.post('/auth/school', requireUser, async (c) => {
+  const user = c.get('user');
+  const input = parse(branchSwitchInput, await c.req.json());
+  await checkSchoolChoice(c, user, input.branch_id);
+  await c.env.DB.prepare('UPDATE auth_sessions SET branch_id = ? WHERE id = ?')
+    .bind(input.branch_id, user.session_id)
+    .run();
   return c.json({ ok: true });
 });
 
@@ -268,12 +226,19 @@ authRoutes.post('/auth/password', requireUser, async (c) => {
       current_password: 'Wrong password',
     });
   }
+  if (input.current_password === input.new_password) {
+    throw new AppError(400, 'Choose a new password that is different from the old one.', {
+      new_password: 'Same as the old password',
+    });
+  }
   await db.batch([
     db
-      .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+      .prepare(
+        'UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?',
+      )
       .bind(await hashPassword(input.new_password), new Date().toISOString(), user.id),
     db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(user.id),
-    await startSession(c, user.id),
+    await startSession(c, user.id, user.session_branch_id),
     audit(c, {
       action: 'update',
       entity: 'user',
