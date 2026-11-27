@@ -171,7 +171,10 @@ const groups = [
 const rolls = new Map();
 const sectionOf = (branch, cls, name) =>
   `(SELECT id FROM sections WHERE branch_id = ${branch} AND class_id = ${cls} AND name = '${name}')`;
-let id = 0;
+// Student ids start high so they never clash with the Demo School's sample students (migration
+// 0006), which already hold the first ids. The two sets of students can live side by side.
+const FIRST_ID = 1000;
+let id = FIRST_ID;
 for (const [branch, cls, count] of groups) {
   for (let i = 0; i < count; i++) {
     id++;
@@ -179,11 +182,11 @@ for (const [branch, cls, count] of groups) {
     const surname = pick(surnames);
     insert('students', {
       id,
-      admission_no: String(1000 + id),
+      admission_no: String(id),
       name: `${pick(girl ? girls : boys)} ${surname}`,
       father_name: `${pick(fathers)} ${surname}`,
       mother_name: `${pick(girls)} Devi`,
-      phone: `97${String(10000000 + id * 7919)}`,
+      phone: `97${String(10000000 + (id - FIRST_ID) * 7919)}`,
       phone2: '',
       address: pick(villages),
       dob: `${2026 - (cls + 2)}-${String(1 + rnd(12)).padStart(2, '0')}-${String(1 + rnd(28)).padStart(2, '0')}`,
@@ -205,7 +208,7 @@ for (const [branch, cls, count] of groups) {
         `INSERT INTO enrolments (student_id, session_id, branch_id, class_id, section_id, roll_no, admission_type, status, result, created_at, updated_at) VALUES (${id}, ${LAST}, ${branch}, ${lastClass}, ${sectionOf(branch, lastClass, section)}, NULL, 'new', 'studying', '${repeated ? 'fail' : 'pass'}', ${q(now)}, ${q(now)});`,
       );
     }
-    const left = id % 15 === 0;
+    const left = (id - FIRST_ID) % 15 === 14;
     sql.push(
       `INSERT INTO enrolments (student_id, session_id, branch_id, class_id, section_id, roll_no, admission_type, status, left_date, created_at, updated_at) VALUES (${id}, ${THIS}, ${branch}, ${cls}, ${sectionOf(branch, cls, section)}, ${roll}, '${old ? 'old' : 'new'}', '${left ? 'left' : 'studying'}', ${left ? "'2026-08-10'" : 'NULL'}, ${q(now)}, ${q(now)});`,
     );
@@ -221,7 +224,9 @@ insert('audit_log', {
 });
 
 writeFileSync(new URL('./.seed.sql', import.meta.url), sql.join('\n') + '\n');
-console.log(`Wrote seed/.seed.sql: ${id} students, ${staff.length} staff, ${users.length} logins.`);
+console.log(
+  `Wrote seed/.seed.sql: ${id - FIRST_ID} students, ${staff.length} staff, ${users.length} logins.`,
+);
 console.log(
   'Sign in as admin@sps.com (password admin@123), manager@sps.com (manager@123), or kamalganj@sps.com, kannauj@sps.com (password demo12345).',
 );

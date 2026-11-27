@@ -238,7 +238,15 @@ differ from Kamalganj; a new branch starts with a copy.
 - Payment modes: Cash, UPI, Bank, Cheque, with reference number.
 - Cancel receipt (admin/management only) with a reason; balance recalculates.
 - A student marked Left owes nothing further; what they paid stays in collections.
-- Late fee: not in v1; design so it can be added as another charge type later.
+- **Late fee** (owner's request, 2026-11-27): ₹5 for every day after the 20th of a month that
+  that month's fee is unpaid, up to the day it is paid (no cap). Taken on the receipt next to the
+  fees; admin and management can waive it, all or part, with a reason. Months before the student
+  joined carry none. See `docs/modules/fees.md`.
+- **Previous dues** (Old students) are a one-time charge cleared first. **Transport**: the admin
+  sets up routes (start, end, monthly fee) per school; choosing one adds its fee to every month.
+- **Discount while paying** can be an overall discount on the total pending fees, or a discount
+  on the payment itself.
+- **Cancel registration** (with reason): the student is marked as left with the reason on record.
 
 ### Screens
 
@@ -257,11 +265,11 @@ differ from Kamalganj; a new branch starts with a copy.
   comparison, class-wise position, largest dues with phone, latest receipts,
   total discounts.
 
-### Reports (each with filters, CSV/Excel download, print)
+### Reports (each with filters and a period such as Today, CSV/Excel download, print)
 
 Collection register (date range, branch, class, mode) · Day-wise collection by
 mode (cash tally) · Pending dues (due today or whole year, minimum amount, class,
-section) with phone numbers · Fee register (one line per student) · Class-wise
+section) with phone numbers · Class-wise pending list (every student of a class) · Fee register (one line per student) · Class-wise
 summary · Branch-wise summary · Discounts given (per fee type, with reason, plus
 counter discounts) · Collected by staff member · Cancelled receipts.
 

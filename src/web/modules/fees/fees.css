@@ -45,22 +45,24 @@
 .months {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(4, 1fr);
+  /* minmax(0, 1fr): a box may shrink below its text, so four fit in 328 px without sideways scrolling */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 @media (min-width: 700px) {
   .months {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 .month {
   display: grid;
   gap: 1px;
   align-content: start;
-  padding: 6px 8px;
+  min-width: 0;
+  padding: 6px 5px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   line-height: 1.25;
 }
 .month strong {
@@ -222,4 +224,15 @@
 .fee-row-note {
   grid-column: 1 / -1;
   margin: 0;
+}
+
+.late-table th,
+.late-table td {
+  white-space: nowrap;
+  padding: 8px 10px;
+}
+.late-table tfoot th,
+.late-table tfoot td {
+  font-weight: 800;
+  color: var(--ink);
 }

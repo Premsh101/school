@@ -29,6 +29,44 @@ dashboard proper graphs, filters and reports.
   (`reports`), so attendance and others can add theirs later. Student reports (list, class
   strength, students who left) are new.
 
+## 2026-11-27 — Late fee, transport, previous dues, cancelled registrations, report periods
+
+**Owner's requests** (answers to the questions asked first): cancel the _student's registration_;
+transport routes set by the admin; late fee with **no cap**; a period on **every** report.
+
+- **Late fee is derived, not stored per month.** `lateFee()` in `src/shared/fees.ts` works out,
+  from the student's receipts in date order, the day each month was fully paid under the
+  oldest-first rule, then counts days after the 20th. What is stored is the running totals
+  (`late_fee_paid`, `late_fee_waived`) and, on each receipt, the part that was a late fee
+  (`receipts.late_fee`). Cancelling a receipt therefore brings the late fee back by itself.
+  Lists (collect, pending, class-wise pending) compute it for the rows shown (`lateFeesFor`);
+  the SQL position used by dashboards is unchanged, so dashboard "overdue" does not include late
+  fees. A late fee was not made a "charge type" because it depends on payment dates.
+- **Months before the student joined carry no late fee** (their 20th is before the enrolment date,
+  India time). Otherwise a student admitted in September would owe ₹5 × 150 days for April. The same
+  applies to students imported mid-year: months before the import carry none. Say if this should change.
+- `receipts.amount` stays "money received" (cash tally, day-wise report), late fee included;
+  `student_fees.paid` stays "money received for fees", so fee maths and `positionSql()` did not change.
+- **Previous dues** and **transport** are two more charge types in `items` (nine now). Previous
+  dues are one-time and first in the clearing order; transport is "monthly-kind" (`MONTHLY_TYPES`),
+  added to the month's amount, so the month boxes, due-today and quick buttons needed no new rules.
+  `loadStudentFees` fills the two in (at 0) for plans saved before they existed. Transport routes
+  are per school; a student keeps a copy of start and end, so editing a route changes nobody's fee.
+- **Overall discount while paying** reuses the receipt's counter discount fields; a new input
+  `discount_basis` ('total' or 'payment') decides what the % is taken of and whether the discount is
+  inside or on top of the money taken. Default stays 'payment', so older behaviour and tests are unchanged.
+- **Cancelling a registration** sets the class record to `left` and adds `cancelled_at`,
+  `cancel_reason`, `cancelled_by_name` (a CHECK on `enrolments.status` cannot be changed without
+  rebuilding the table). Everything that already treats `left` correctly (no more fees, lists,
+  late fee) therefore works with no change.
+- **Reports:** the period is just `from`/`to`. Reports not about dates ignore it when empty, and add
+  "Collected in period" when set, so existing links and downloads are unchanged.
+- Migration 0007 adds the columns and tables; 0006 (Demo School) runs before it, which is fine
+  because every new column has a default.
+- Local demo seed: student ids now start at 1000 so `npm run seed` no longer clashes with the Demo
+  School's students (it failed on a freshly migrated database after migration 0006).
+- Months boxes on the student fee page no longer push the page sideways at 360 px.
+
 ## 2026-11-20 — Demo School on the live site; easier sign-out
 
 **Owner's request:** demo data on the live site, but not counted in "All schools".

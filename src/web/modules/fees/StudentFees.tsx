@@ -167,12 +167,12 @@ export function StudentFeesPage() {
             )}
           </p>
           <div className="table-wrap">
-            <table>
+            <table className="late-table">
               <thead>
                 <tr>
                   <th>{t('Month')}</th>
                   <th>{t('Paid on')}</th>
-                  <th className="num">{t('Days late')}</th>
+                  <th className="num">{t('Days')}</th>
                   <th className="num">{t('Late fee')}</th>
                 </tr>
               </thead>
@@ -180,9 +180,9 @@ export function StudentFeesPage() {
                 {late.months.map((m) => (
                   <tr key={m.index}>
                     <th scope="row">
-                      {t(MONTH_NAMES[m.month - 1]!)} {m.year}
+                      {t(MONTH_NAMES[m.month - 1]!).slice(0, 3)} {m.year}
                     </th>
-                    <td>{m.cleared_on ? formatDate(m.cleared_on) : t('Not paid yet')}</td>
+                    <td>{m.cleared_on ? formatDate(m.cleared_on) : t('Unpaid')}</td>
                     <td className="num">{m.days}</td>
                     <td className="num">{inr(m.fee)}</td>
                   </tr>
