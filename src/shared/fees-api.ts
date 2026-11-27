@@ -147,7 +147,7 @@ export interface FeesDashboard {
   last_14_days: { date: string; amount: number }[];
   /** Payment modes within the chosen date range. */
   by_mode: { mode: PaymentMode; amount: number; receipts: number }[];
-  largest_dues: (CollectRow & { phone2: string })[];
+  largest_dues: (Omit<CollectRow, 'late_fee'> & { phone2: string })[];
   latest_receipts: {
     id: number;
     receipt_no: string;
@@ -178,31 +178,38 @@ export const REPORTS = [
     id: 'pending',
     name: 'Pending dues',
     description: 'Who owes how much, due today or for the whole year, with phone numbers.',
-    filters: ['basis', 'min', 'branch', 'class', 'section'],
+    filters: ['dates', 'basis', 'min', 'branch', 'class', 'section'],
+  },
+  {
+    id: 'classpending',
+    name: 'Class-wise pending list',
+    description:
+      'Every student of a class with what they owe: due today, pending for the year and late fee, with phone numbers.',
+    filters: ['dates', 'branch', 'class', 'section'],
   },
   {
     id: 'register',
     name: 'Fee register',
     description: 'One line per student: fee, discount, paid, pending and overdue.',
-    filters: ['branch', 'class', 'section'],
+    filters: ['dates', 'branch', 'class', 'section'],
   },
   {
     id: 'classwise',
     name: 'Class-wise summary',
     description: 'Fee totals for each class: to pay, collected, pending and overdue.',
-    filters: ['branch'],
+    filters: ['dates', 'branch'],
   },
   {
     id: 'branchwise',
     name: 'School-wise summary',
     description: 'Fee totals for each school, side by side.',
-    filters: [],
+    filters: ['dates'],
   },
   {
     id: 'discounts',
     name: 'Discounts given',
     description: 'Every discount by fee type with its reason, plus discounts given at the counter.',
-    filters: ['branch', 'class'],
+    filters: ['dates', 'branch', 'class'],
   },
   {
     id: 'staff',

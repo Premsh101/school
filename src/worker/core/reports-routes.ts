@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { isValidDate } from '../../shared/dates';
 import { CORE_REPORTS, type ReportColumn, type ReportResult } from '../../shared/reports';
 import type { AppEnv } from '../env';
 import { assertBranch, requirePermission, scopeSql } from './auth';
@@ -35,13 +36,25 @@ reportRoutes.get('/reports/:name', requirePermission('students.view'), async (c)
   const joins = `FROM enrolments e JOIN students s ON s.id = e.student_id JOIN classes cl ON cl.id = e.class_id
     JOIN sections sec ON sec.id = e.section_id JOIN branches b ON b.id = e.branch_id`;
   const args: unknown[] = [session.id, branchId, classId, sectionId];
+  // An optional period. The dates were checked (YYYY-MM-DD), so they are safe to write into the query.
+  const from = q.from && isValidDate(q.from) ? q.from : '0001-01-01';
+  const to = q.to && isValidDate(q.to) ? q.to : '9999-12-31';
+  const hasRange = from !== '0001-01-01' || to !== '9999-12-31';
+  const periodNote = !hasRange
+    ? ''
+    : from === '0001-01-01'
+      ? `, up to ${to}`
+      : to === '9999-12-31'
+        ? `, from ${from}`
+        : `, ${from} to ${to}`;
+  const joinedOn = `date(e.created_at, '+330 minutes')`;
 
   let columns: ReportColumn[];
   let sql: string;
   let subtitle = session.name;
   switch (report.id) {
     case 'students':
-      subtitle = `${session.name}, ${status === 'all' ? 'everyone' : status === 'left' ? 'left' : 'studying'}`;
+      subtitle = `${session.name}, ${status === 'all' ? 'everyone' : status === 'left' ? 'left' : 'studying'}${hasRange ? `, joined${periodNote}` : ''}`;
       columns = [
         col('admission_no', 'Adm. no'),
         col('name', 'Student'),
@@ -60,7 +73,7 @@ reportRoutes.get('/reports/:name', requirePermission('students.view'), async (c)
       ];
       sql = `SELECT s.admission_no, s.name, s.father_name, s.mother_name, cl.name || ' ' || sec.name AS class, e.roll_no,
                     s.gender, s.dob, s.phone, s.phone2, e.admission_type AS type, e.status, b.name AS branch, s.address
-             ${joins} ${where} AND (?5 = 'all' OR e.status = ?5)
+             ${joins} ${where} AND (?5 = 'all' OR e.status = ?5)${hasRange ? ` AND ${joinedOn} BETWEEN '${from}' AND '${to}'` : ''}
              ORDER BY b.id, cl.sort_order, sec.name, e.roll_no IS NULL, e.roll_no, s.name`;
       args.push(status);
       break;
@@ -75,18 +88,21 @@ reportRoutes.get('/reports/:name', requirePermission('students.view'), async (c)
         col('new', 'New', 'number'),
         col('old', 'Old', 'number'),
         col('left', 'Left', 'number'),
+        ...(hasRange ? [col('joined', 'Joined in period', 'number')] : []),
       ];
+      if (hasRange) subtitle += `, joined${periodNote}`;
       sql = `SELECT b.name AS branch, cl.name AS class, sec.name AS section,
                     SUM(e.status = 'studying') AS total,
                     SUM(e.status = 'studying' AND s.gender = 'male') AS boys,
                     SUM(e.status = 'studying' AND s.gender = 'female') AS girls,
                     SUM(e.status = 'studying' AND e.admission_type = 'new') AS new,
                     SUM(e.status = 'studying' AND e.admission_type = 'old') AS old,
-                    SUM(e.status = 'left') AS left
+                    SUM(e.status = 'left') AS left${hasRange ? `, SUM(${joinedOn} BETWEEN '${from}' AND '${to}') AS joined` : ''}
              ${joins} ${where}
              GROUP BY e.branch_id, e.class_id, e.section_id ORDER BY b.id, cl.sort_order, sec.name`;
       break;
     case 'left':
+      if (hasRange) subtitle += `, left${periodNote}`;
       columns = [
         col('admission_no', 'Adm. no'),
         col('name', 'Student'),
@@ -100,7 +116,7 @@ reportRoutes.get('/reports/:name', requirePermission('students.view'), async (c)
       ];
       sql = `SELECT s.admission_no, s.name, s.father_name, cl.name || ' ' || sec.name AS class, e.left_date,
                     COALESCE(e.cancel_reason, '') AS reason, s.phone, s.phone2, b.name AS branch
-             ${joins} ${where} AND e.status = 'left' ORDER BY e.left_date DESC, s.name`;
+             ${joins} ${where} AND e.status = 'left'${hasRange ? ` AND e.left_date BETWEEN '${from}' AND '${to}'` : ''} ORDER BY e.left_date DESC, s.name`;
       break;
   }
   const { results } = await db

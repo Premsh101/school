@@ -394,7 +394,10 @@ studentRoutes.post(
     if (!existing) throw notFound('Class record');
     assertBranch(user, existing.branch_id);
     if (existing.status === 'left')
-      throw new AppError(409, 'This student has already left, so there is no registration to cancel.');
+      throw new AppError(
+        409,
+        'This student has already left, so there is no registration to cancel.',
+      );
     const date = input.date ?? todayIST();
     if (date > todayIST())
       throw new AppError(400, 'The date cannot be in the future.', { date: 'In the future' });
@@ -404,7 +407,14 @@ studentRoutes.post(
           `UPDATE enrolments SET status = 'left', left_date = ?, cancelled_at = ?, cancel_reason = ?,
                   cancelled_by_name = ?, updated_at = ? WHERE id = ? AND status <> 'left'`,
         )
-        .bind(date, new Date().toISOString(), input.reason, user.name, new Date().toISOString(), id),
+        .bind(
+          date,
+          new Date().toISOString(),
+          input.reason,
+          user.name,
+          new Date().toISOString(),
+          id,
+        ),
       audit(c, {
         action: 'cancel',
         entity: 'enrolment',
