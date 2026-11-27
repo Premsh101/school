@@ -31,6 +31,8 @@ export const ratesInput = z.object({
 export const ratesStartInput = z.object({ session_id: id });
 
 export const studentFeesInput = z.object({
+  /** The transport route (source to destination) the student uses, or null for none. */
+  transport_route_id: id.nullable().default(null),
   months: z.number().int().min(0, 'Months must be 0 to 12').max(12, 'Months must be 0 to 12'),
   discount_reason: z.string().trim().max(100).default(''),
   items: z
@@ -48,8 +50,17 @@ export const studentFeesInput = z.object({
 export const receiptInput = z.object({
   enrolment_id: id,
   date: z.string().refine(isValidDate, 'Enter a real date'),
-  /** How much of the student's dues this receipt clears, before any counter discount. */
-  settle_amount: rupees.min(1, 'Enter an amount more than 0'),
+  /**
+   * With discount_basis 'payment': how much of the student's dues this receipt clears, before
+   * the discount, which comes out of it. With 'total': the money taken for fees, on top of a
+   * discount worked out on the student's total pending fees.
+   */
+  settle_amount: rupees,
+  discount_basis: z.enum(['payment', 'total']).default('payment'),
+  /** Late fee taken with this receipt (never more than what is owed). */
+  late_fee: rupees.default(0),
+  /** Waive the late fee owed instead of taking it (admin and management only). */
+  waive_late_fee: z.boolean().default(false),
   counter_discount_type: z.enum(DISCOUNT_TYPES).default('none'),
   counter_discount_value: z.number().int('Use a whole number').min(0).max(1_000_000).default(0),
   mode: z.enum(PAYMENT_MODES),
@@ -59,4 +70,18 @@ export const receiptInput = z.object({
 
 export const cancelInput = z.object({
   reason: z.string().trim().min(3, 'Write why the receipt is being cancelled').max(200),
+});
+
+export const lateFeeWaiverInput = z.object({
+  /** Leave out to waive everything that is owed. */
+  amount: rupees.min(1, 'Enter an amount more than 0').optional(),
+  reason: z.string().trim().min(3, 'Write why the late fee is waived').max(200),
+});
+
+export const transportRouteInput = z.object({
+  branch_id: id,
+  source: z.string().trim().min(1, 'Enter where the route starts').max(60),
+  destination: z.string().trim().min(1, 'Enter where the route ends').max(60),
+  monthly_fee: rupees,
+  active: z.boolean().default(true),
 });
