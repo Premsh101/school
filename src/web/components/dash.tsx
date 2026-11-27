@@ -68,7 +68,8 @@ export function Segmented<V extends string>({
   onChange,
 }: {
   label: string;
-  value: V;
+  /** '' = none of the options is active (for example a custom range). */
+  value: V | '';
   options: { value: V; label: string }[];
   onChange: (value: V) => void;
 }) {

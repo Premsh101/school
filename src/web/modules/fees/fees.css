@@ -218,3 +218,8 @@
     border: 0;
   }
 }
+
+.fee-row-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}

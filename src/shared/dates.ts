@@ -101,3 +101,28 @@ const SHORT_MONTHS = [
 export function shortDate(value: string): string {
   return `${Number(value.slice(8, 10))} ${SHORT_MONTHS[Number(value.slice(5, 7)) - 1] ?? ''}`;
 }
+
+/** The Monday of the week a date falls in (weeks run Monday to Sunday). */
+export function startOfWeek(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay(); // 0 = Sunday
+  return addDays(date, -((day + 6) % 7));
+}
+
+/** Quick periods for filters. "all" has no dates: no period chosen. */
+export type PeriodKey = 'today' | 'yesterday' | 'week' | 'month' | 'all';
+export function periodDates(key: PeriodKey, today: string): { from: string; to: string } {
+  switch (key) {
+    case 'today':
+      return { from: today, to: today };
+    case 'yesterday': {
+      const y = addDays(today, -1);
+      return { from: y, to: y };
+    }
+    case 'week':
+      return { from: startOfWeek(today), to: today };
+    case 'month':
+      return { from: `${today.slice(0, 8)}01`, to: today };
+    case 'all':
+      return { from: '', to: '' };
+  }
+}

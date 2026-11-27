@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toCsv } from '../../shared/csv';
-import { formatDate } from '../../shared/dates';
+import { formatDate, periodDates, type PeriodKey } from '../../shared/dates';
 import { MODE_LABELS, PAYMENT_MODES } from '../../shared/fees';
 import { formatINR } from '../../shared/format';
 import {
@@ -14,6 +14,7 @@ import {
 import { api, query } from '../app/api';
 import { useBoot } from '../app/boot';
 import { t } from '../app/i18n';
+import { Segmented } from '../components/dash';
 import { Icon } from '../components/icons';
 import {
   Button,
@@ -157,6 +158,19 @@ function ReportView({ group, report }: { group: Group; report: ReportDef }) {
     status: 'studying',
   });
   const set = (key: keyof typeof f) => (value: string) => setF((old) => ({ ...old, [key]: value }));
+  // Quick periods. Picking one runs the report straight away.
+  const pickPeriod = (key: PeriodKey) => {
+    const { from, to } = periodDates(key, boot.today);
+    setF((old) => ({ ...old, from, to }));
+    setAsked({ ...build(), from, to });
+  };
+  const activePeriod: PeriodKey | '' =
+    (['today', 'yesterday', 'week', 'month', 'all'] as const).find((k) => {
+      const p = periodDates(k, boot.today);
+      return p.from === f.from && p.to === f.to;
+    }) ?? '';
+  // Reports about receipts always have a period; the others look at everything until one is chosen.
+  const dated = ['collection', 'daywise', 'staff', 'cancelled'].includes(report.id);
   const sections =
     f.branch_id && f.class_id ? boot.sectionsOf(Number(f.branch_id), Number(f.class_id)) : [];
   const build = () => ({
@@ -249,9 +263,33 @@ function ReportView({ group, report }: { group: Group; report: ReportDef }) {
           }}
         >
           {has('dates') && (
+            <div className="field period-field">
+              <span className="label">{t('Period')}</span>
+              <Segmented
+                label={t('Period')}
+                value={activePeriod}
+                onChange={pickPeriod}
+                options={[
+                  { value: 'today', label: t('Today') },
+                  { value: 'yesterday', label: t('Yesterday') },
+                  { value: 'week', label: t('This week') },
+                  { value: 'month', label: t('This month') },
+                  { value: 'all', label: dated ? t('Whole session') : t('All dates') },
+                ]}
+              />
+              {!dated && (
+                <span className="hint">
+                  {t(
+                    'Choose a period to also see what was collected or changed in it. Leave it empty to see everything.',
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+          {has('dates') && (
             <TextField
               label={t('From date')}
-              hint={t('Empty = start of session')}
+              hint={dated ? t('Empty = start of session') : t('Empty = no start date')}
               type="date"
               value={f.from}
               onChange={set('from')}
@@ -261,7 +299,7 @@ function ReportView({ group, report }: { group: Group; report: ReportDef }) {
           {has('dates') && (
             <TextField
               label={t('To date')}
-              hint={t('Empty = today')}
+              hint={dated ? t('Empty = today') : t('Empty = no end date')}
               type="date"
               value={f.to}
               onChange={set('to')}

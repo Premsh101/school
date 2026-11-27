@@ -26,6 +26,7 @@ export function StudentDetailPage() {
   const boot = useBoot();
   const [editing, setEditing] = useState<Enrolment | null>(null);
   const [adding, setAdding] = useState(false);
+  const [cancelling, setCancelling] = useState<Enrolment | null>(null);
   const detail = useQuery({
     queryKey: ['student', id],
     queryFn: () => api.get<StudentDetail>(`/students/${id}`),
@@ -101,10 +102,17 @@ export function StudentDetailPage() {
                   {boot.branchName(e.branch_id)} ·{' '}
                   {e.admission_type === 'new' ? t('New admission') : t('Old student')}
                 </div>
+                {e.cancel_reason && (
+                  <div className="muted small">
+                    {t('Reason: {reason}', { reason: e.cancel_reason })}
+                  </div>
+                )}
                 <div className="row" style={{ marginTop: 4, gap: 6 }}>
                   {e.status === 'left' ? (
                     <Badge tone="grey">
-                      {t('Left on {date}', { date: formatDate(e.left_date) })}
+                      {e.cancel_reason
+                        ? t('Registration cancelled on {date}', { date: formatDate(e.left_date) })
+                        : t('Left on {date}', { date: formatDate(e.left_date) })}
                     </Badge>
                   ) : (
                     e.result === null && <Badge>{t('Studying')}</Badge>
@@ -129,6 +137,18 @@ export function StudentDetailPage() {
                   {t('Edit')}
                 </Button>
               )}
+              {canEdit &&
+                e.status === 'studying' &&
+                boot.branches.some((b) => b.id === e.branch_id) && (
+                  <Button
+                    small
+                    variant="danger"
+                    onClick={() => setCancelling(e)}
+                    aria-label={t('Cancel registration for {session}', { session: e.session_name })}
+                  >
+                    {t('Cancel registration')}
+                  </Button>
+                )}
             </li>
           ))}
         </ol>
@@ -139,7 +159,74 @@ export function StudentDetailPage() {
       {adding && (
         <EnrolmentSheet studentId={s.id} enrolment={null} onClose={() => setAdding(false)} />
       )}
+      {cancelling && (
+        <CancelRegistrationSheet
+          name={s.name}
+          enrolment={cancelling}
+          onClose={() => setCancelling(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Cancels the registration of one year, with a reason. The student is then marked as left. */
+function CancelRegistrationSheet({
+  name,
+  enrolment,
+  onClose,
+}: {
+  name: string;
+  enrolment: Enrolment;
+  onClose: () => void;
+}) {
+  const boot = useBoot();
+  const client = useQueryClient();
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [date, setDate] = useState(boot.today);
+  const cancel = useMutation({
+    mutationFn: () => api.post(`/enrolments/${enrolment.id}/cancel-registration`, { reason, date }),
+    onSuccess: async () => {
+      await client.invalidateQueries();
+      toast(t('Registration cancelled'));
+      onClose();
+    },
+  });
+  const err = fieldErrors(cancel.error);
+  return (
+    <Sheet title={t('Cancel registration')} onClose={onClose}>
+      <p>
+        {t(
+          'The registration of {name} for {session} is cancelled and they are marked as left. They owe nothing further, and what they have already paid stays in the collections. You can undo this by setting the student back to Studying.',
+          { name, session: enrolment.session_name },
+        )}
+      </p>
+      <TextField
+        label={t('Why is the registration being cancelled?')}
+        value={reason}
+        onChange={setReason}
+        error={err.reason}
+      />
+      <TextField
+        label={t('Date')}
+        type="date"
+        value={date}
+        onChange={setDate}
+        max={boot.today}
+        error={err.date}
+      />
+      <ErrorNote error={cancel.error} />
+      <Button
+        variant="danger"
+        block
+        busy={cancel.isPending}
+        disabled={reason.trim().length < 3}
+        onClick={() => cancel.mutate()}
+      >
+        {t('Cancel this registration')}
+      </Button>
+    </Sheet>
   );
 }
 

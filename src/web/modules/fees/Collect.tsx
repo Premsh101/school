@@ -120,6 +120,11 @@ export function CollectPage() {
                     ) : (
                       <Badge tone="green">{t('Fully paid')}</Badge>
                     )}
+                    {s.status !== 'left' && s.late_fee > 0 && (
+                      <span className="late-text small" style={{ display: 'block' }}>
+                        {t('+ {amount} late fee', { amount: inr(s.late_fee) })}
+                      </span>
+                    )}
                   </span>
                   <Icon name="chevron" />
                 </Link>
