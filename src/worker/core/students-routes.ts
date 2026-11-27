@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { todayIST } from '../../shared/dates';
 import {
   enrolmentCreateInput,
+  cancelRegistrationInput,
   enrolmentUpdateInput,
   studentCreateInput,
   studentPersonInput,
@@ -76,7 +77,7 @@ async function loadStudent(c: Ctx, id: number): Promise<StudentDetail> {
       .prepare(
         `SELECT e.id, e.student_id, e.session_id, ses.name AS session_name, e.branch_id, e.class_id,
                 e.section_id, sec.name AS section_name, e.roll_no, e.admission_type, e.status,
-                e.left_date, e.result
+                e.left_date, e.result, e.cancel_reason
            FROM enrolments e JOIN academic_sessions ses ON ses.id = e.session_id
            JOIN sections sec ON sec.id = e.section_id
           WHERE e.student_id = ? ORDER BY ses.start_year DESC`,
@@ -349,6 +350,13 @@ studentRoutes.put('/enrolments/:id', requirePermission('students.edit'), async (
         new Date().toISOString(),
         id,
       ),
+    // Putting a student back as studying also takes back a cancelled registration.
+    db
+      .prepare(
+        `UPDATE enrolments SET cancelled_at = NULL, cancel_reason = NULL, cancelled_by_name = NULL
+          WHERE id = ? AND status = 'studying' AND cancelled_at IS NOT NULL`,
+      )
+      .bind(id),
     audit(c, {
       action: 'update',
       entity: 'enrolment',
@@ -362,3 +370,49 @@ studentRoutes.put('/enrolments/:id', requirePermission('students.edit'), async (
   ]);
   return c.json({ ok: true });
 });
+
+/**
+ * Cancels a student's registration for a session, with a reason. The student is marked as left
+ * (so they owe nothing further and what they paid stays in collections), and the record keeps
+ * the reason, who cancelled it and when, so it shows as a cancelled registration, not a leaver.
+ */
+studentRoutes.post(
+  '/enrolments/:id/cancel-registration',
+  requirePermission('students.edit'),
+  async (c) => {
+    const db = c.env.DB;
+    const user = c.get('user');
+    const id = intParam(c.req.param('id'), 'Class record');
+    const input = parse(cancelRegistrationInput, await c.req.json());
+    const existing = await db
+      .prepare(
+        `SELECT e.branch_id, e.status, s.name AS student_name FROM enrolments e
+           JOIN students s ON s.id = e.student_id WHERE e.id = ?`,
+      )
+      .bind(id)
+      .first<{ branch_id: number; status: string; student_name: string }>();
+    if (!existing) throw notFound('Class record');
+    assertBranch(user, existing.branch_id);
+    if (existing.status === 'left')
+      throw new AppError(409, 'This student has already left, so there is no registration to cancel.');
+    const date = input.date ?? todayIST();
+    if (date > todayIST())
+      throw new AppError(400, 'The date cannot be in the future.', { date: 'In the future' });
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE enrolments SET status = 'left', left_date = ?, cancelled_at = ?, cancel_reason = ?,
+                  cancelled_by_name = ?, updated_at = ? WHERE id = ? AND status <> 'left'`,
+        )
+        .bind(date, new Date().toISOString(), input.reason, user.name, new Date().toISOString(), id),
+      audit(c, {
+        action: 'cancel',
+        entity: 'enrolment',
+        entity_id: id,
+        branch_id: existing.branch_id,
+        summary: `Cancelled the registration of ${existing.student_name}: ${input.reason}`,
+      }),
+    ]);
+    return c.json({ ok: true });
+  },
+);

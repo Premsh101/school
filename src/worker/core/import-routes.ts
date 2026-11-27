@@ -47,8 +47,6 @@ const GENDERS: Record<string, string> = {
   female: 'female',
   girl: 'female',
   g: 'female',
-  o: 'other',
-  other: 'other',
 };
 
 /** Pure check of one chunk of import rows. Every problem is reported with its line number. */
@@ -115,7 +113,7 @@ export function validateImportRows(
 
     const gender = row.gender ? GENDERS[row.gender.toLowerCase()] : '';
     if (gender === undefined)
-      problems.push(`Gender "${row.gender}" is not known. Use Male, Female or Other`);
+      problems.push(`Gender "${row.gender}" is not known. Use Male or Female`);
 
     for (const [label, value] of [
       ['Phone', row.phone],

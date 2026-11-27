@@ -135,13 +135,7 @@ const show = (column: ReportColumn, value: string | number | null): string => {
   if (column.key === 'type') return value === 'new' ? t('New') : t('Old');
   if (column.key === 'status') return value === 'left' ? t('Left') : t('Studying');
   if (column.key === 'gender')
-    return value === 'male'
-      ? t('Boy')
-      : value === 'female'
-        ? t('Girl')
-        : value === 'other'
-          ? t('Other')
-          : '';
+    return value === 'male' ? t('Male') : value === 'female' ? t('Female') : '';
   return String(value);
 };
 /** Long text columns that may wrap; everything else stays on one line. */

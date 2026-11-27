@@ -70,8 +70,8 @@ reportRoutes.get('/reports/:name', requirePermission('students.view'), async (c)
         col('class', 'Class'),
         col('section', 'Section'),
         col('total', 'Studying', 'number'),
-        col('boys', 'Boys', 'number'),
-        col('girls', 'Girls', 'number'),
+        col('boys', 'Male', 'number'),
+        col('girls', 'Female', 'number'),
         col('new', 'New', 'number'),
         col('old', 'Old', 'number'),
         col('left', 'Left', 'number'),
@@ -93,12 +93,13 @@ reportRoutes.get('/reports/:name', requirePermission('students.view'), async (c)
         col('father_name', 'Father'),
         col('class', 'Class'),
         col('left_date', 'Left on', 'date'),
+        col('reason', 'Reason, if the registration was cancelled'),
         col('phone', 'Phone'),
         col('phone2', 'Phone 2'),
         col('branch', 'School'),
       ];
       sql = `SELECT s.admission_no, s.name, s.father_name, cl.name || ' ' || sec.name AS class, e.left_date,
-                    s.phone, s.phone2, b.name AS branch
+                    COALESCE(e.cancel_reason, '') AS reason, s.phone, s.phone2, b.name AS branch
              ${joins} ${where} AND e.status = 'left' ORDER BY e.left_date DESC, s.name`;
       break;
   }

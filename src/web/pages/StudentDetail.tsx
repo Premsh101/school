@@ -40,7 +40,7 @@ export function StudentDetailPage() {
     .flatMap((m) => m.studentLinks ?? [])
     .filter((link) => !link.permission || boot.can(link.permission));
   const inChosenSession = enrolments.some((e) => e.session_id === boot.session?.id);
-  const gender = { male: t('Boy'), female: t('Girl'), other: t('Other'), '': '' }[s.gender];
+  const gender = { male: t('Male'), female: t('Female'), other: '', '': '' }[s.gender];
 
   return (
     <div className="stack">

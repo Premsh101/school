@@ -172,7 +172,7 @@ export function ImportPage() {
           '',
           'Kamalganj',
           '23/08/2015',
-          'Girl',
+          'Female',
           '5',
           'A',
           '1',

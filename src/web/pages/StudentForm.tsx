@@ -146,9 +146,8 @@ export function StudentFormPage() {
             placeholder={t('Not set')}
             onChange={set('gender')}
             options={[
-              { value: 'male', label: t('Boy') },
-              { value: 'female', label: t('Girl') },
-              { value: 'other', label: t('Other') },
+              { value: 'male', label: t('Male') },
+              { value: 'female', label: t('Female') },
             ]}
           />
         </div>

@@ -37,7 +37,7 @@ export const CORE_REPORTS = [
   {
     id: 'strength',
     name: 'Class strength',
-    description: 'Students in each class and section: boys, girls, new and old, left.',
+    description: 'Students in each class and section: male, female, new and old, left.',
     filters: ['branch'],
   },
   {
