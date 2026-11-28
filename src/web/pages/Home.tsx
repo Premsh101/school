@@ -136,14 +136,14 @@ export function HomePage() {
           <ChartCard
             className="span-2"
             title={t('Students by class')}
-            sub={t('Studying now, boys and girls')}
+            sub={t('Studying now, male and female')}
             legend={[
-              { label: t('Boys'), color: 'var(--series-1)' },
-              { label: t('Girls'), color: 'var(--series-2)' },
+              { label: t('Male'), color: 'var(--series-1)' },
+              { label: t('Female'), color: 'var(--series-2)' },
               { label: t('Not set'), color: 'var(--series-neutral)' },
             ]}
             table={{
-              columns: [t('Class'), t('Boys'), t('Girls'), t('Total')],
+              columns: [t('Class'), t('Male'), t('Female'), t('Total')],
               rows: classRows.map(({ c, row }) => [c.name, row!.boys, row!.girls, row!.count]),
             }}
           >
@@ -154,8 +154,8 @@ export function HomePage() {
               axisFormat={(n) => count(n)}
               summary={t('Students in each class')}
               series={[
-                { name: t('Boys'), color: 'var(--series-1)' },
-                { name: t('Girls'), color: 'var(--series-2)' },
+                { name: t('Male'), color: 'var(--series-1)' },
+                { name: t('Female'), color: 'var(--series-2)' },
                 { name: t('Not set'), color: 'var(--series-neutral)' },
               ]}
               data={classRows.map(({ c, row }) => ({

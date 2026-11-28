@@ -1,4 +1,11 @@
-import { DEFAULT_RATE_CHART, FEE_KEYS, ONE_TIME_TYPES } from '../../../shared/fees';
+import {
+  DEFAULT_RATE_CHART,
+  FEE_KEYS,
+  lateFee,
+  RATE_ONE_TIME_TYPES,
+  type FeeItem,
+  type LateFee,
+} from '../../../shared/fees';
 
 // SQL building blocks shared by the fees routes and reports.
 
@@ -67,7 +74,7 @@ export function ensureRates(db: D1Database, session: string, value: number): D1P
 
 const item = (type: string) =>
   `json_object('type', '${type}', 'amount', r.${type}, 'discount_type', 'none', 'discount_value', 0, 'discount', 0)`;
-const oneTimeSum = ONE_TIME_TYPES.map((t) => `r.${t}`).join(' + ');
+const oneTimeSum = RATE_ONE_TIME_TYPES.map((t) => `r.${t}`).join(' + ');
 
 /**
  * Copies fees from the rate chart to every student of a session who has none yet
@@ -82,7 +89,7 @@ export function ensureStudentFees(
   return db
     .prepare(
       `INSERT INTO student_fees (enrolment_id, months, items, one_time_gross, one_time_net, monthly_gross, monthly_net, updated_at)
-       SELECT e.id, 12, json_array(${[...ONE_TIME_TYPES, 'monthly'].map(item).join(', ')}),
+       SELECT e.id, 12, json_array(${[...RATE_ONE_TIME_TYPES, 'monthly'].map(item).join(', ')}),
               ${oneTimeSum}, ${oneTimeSum}, r.monthly, r.monthly, ?2
          FROM enrolments e
          JOIN fee_rates r ON r.session_id = e.session_id AND r.branch_id = e.branch_id
@@ -99,13 +106,19 @@ export const afterEnrolments = (db: D1Database, sessionId: number): D1PreparedSt
   ensureStudentFees(db, '?1', sessionId),
 ];
 
-/** Brings a student's paid and counter-discount totals in line with their receipts. */
+/**
+ * Brings a student's totals in line with their receipts. `paid` is money received for fees
+ * (late fees are kept apart), `late_fee_paid` the late fees taken.
+ */
 export function refreshPaid(db: D1Database, enrolmentId: number): D1PreparedStatement {
+  const sum = (expr: string) =>
+    `(SELECT COALESCE(SUM(${expr}), 0) FROM receipts WHERE enrolment_id = ?1 AND cancelled_at IS NULL)`;
   return db
     .prepare(
       `UPDATE student_fees SET
-         paid = (SELECT COALESCE(SUM(amount), 0) FROM receipts WHERE enrolment_id = ?1 AND cancelled_at IS NULL),
-         counter_discount = (SELECT COALESCE(SUM(counter_discount), 0) FROM receipts WHERE enrolment_id = ?1 AND cancelled_at IS NULL)
+         paid = ${sum('amount - late_fee')},
+         counter_discount = ${sum('counter_discount')},
+         late_fee_paid = ${sum('late_fee')}
        WHERE enrolment_id = ?1`,
     )
     .bind(enrolmentId);
@@ -143,3 +156,65 @@ export const STUDENT_JOINS = `FROM enrolments e
   JOIN sections sec ON sec.id = e.section_id
   JOIN classes cl ON cl.id = e.class_id
   LEFT JOIN student_fees f ON f.enrolment_id = e.id`;
+
+/**
+ * The late fee of several students at once (a page of the collect list, or the rows of a
+ * report). Same rules as the student's own page, which calls lateFee() directly.
+ */
+export async function lateFeesFor(
+  db: D1Database,
+  enrolmentIds: number[],
+  today: string,
+): Promise<Map<number, LateFee>> {
+  const out = new Map<number, LateFee>();
+  if (enrolmentIds.length === 0) return out;
+  // Whole numbers read from our own database, so they are safe to put in the query.
+  const ids = enrolmentIds.map((n) => Math.trunc(Number(n))).join(',');
+  const [fees, receipts] = await db.batch([
+    db.prepare(
+      `SELECT f.enrolment_id, f.months, f.items, f.late_fee_paid, f.late_fee_waived, e.status,
+              date(e.created_at, '+330 minutes') AS joined_on, s.start_year, s.start_month
+         FROM student_fees f JOIN enrolments e ON e.id = f.enrolment_id
+         JOIN academic_sessions s ON s.id = e.session_id
+        WHERE f.enrolment_id IN (${ids})`,
+    ),
+    db.prepare(
+      `SELECT enrolment_id, date, amount - late_fee + counter_discount AS settled
+         FROM receipts WHERE enrolment_id IN (${ids}) AND cancelled_at IS NULL ORDER BY id`,
+    ),
+  ]);
+  const byEnrolment = new Map<number, { date: string; settled: number }[]>();
+  for (const r of receipts!.results as { enrolment_id: number; date: string; settled: number }[]) {
+    const list = byEnrolment.get(r.enrolment_id) ?? [];
+    list.push({ date: r.date, settled: r.settled });
+    byEnrolment.set(r.enrolment_id, list);
+  }
+  for (const f of fees!.results as {
+    enrolment_id: number;
+    months: number;
+    items: string;
+    late_fee_paid: number;
+    late_fee_waived: number;
+    status: string;
+    joined_on: string;
+    start_year: number;
+    start_month: number;
+  }[]) {
+    out.set(
+      f.enrolment_id,
+      lateFee(
+        { items: JSON.parse(f.items) as FeeItem[], months: f.months },
+        f,
+        byEnrolment.get(f.enrolment_id) ?? [],
+        today,
+        {
+          paid: f.late_fee_paid,
+          waived: f.late_fee_waived,
+          left: f.status === 'left',
+          joinedOn: f.joined_on,
+        },
+      ),
+    );
+  }
+  return out;
+}

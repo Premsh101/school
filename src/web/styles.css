@@ -1864,3 +1864,17 @@ th.num .th-sort {
   text-align: left;
   cursor: pointer;
 }
+
+/* The quick period buttons on a report take a whole row of the filter grid. */
+.report-filters .period-field {
+  grid-column: 1 / -1;
+}
+.report-filters .period-field .seg {
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+}
+.late-text {
+  color: var(--overdue);
+  font-weight: 700;
+}

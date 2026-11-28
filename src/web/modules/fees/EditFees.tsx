@@ -5,6 +5,7 @@ import {
   CHARGE_LABELS,
   CHARGE_TYPES,
   dueAtAdmission,
+  isMonthlyType,
   itemsFromRate,
   planTotals,
   withDiscounts,
@@ -12,7 +13,7 @@ import {
   type DiscountType,
   type FeeItem,
 } from '../../../shared/fees';
-import type { StudentFeeDetail } from '../../../shared/fees-api';
+import type { StudentFeeDetail, TransportRoute } from '../../../shared/fees-api';
 import { api } from '../../app/api';
 import { t } from '../../app/i18n';
 import {
@@ -67,6 +68,11 @@ export function EditFeesPage() {
     queryKey: ['fees', 'student', id],
     queryFn: () => api.get<StudentFeeDetail>(`/fees/students/${id}`),
   });
+  const routes = useQuery({
+    queryKey: ['fees', 'transport-routes'],
+    queryFn: () => api.get<TransportRoute[]>('/fees/transport-routes'),
+  });
+  const [routeId, setRouteId] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [months, setMonths] = useState('12');
   const [reason, setReason] = useState('');
@@ -77,6 +83,7 @@ export function EditFeesPage() {
     setRows(toRows(detail.data.plan.items));
     setMonths(String(detail.data.plan.months));
     setReason(detail.data.discount_reason);
+    setRouteId(detail.data.transport?.route_id ? String(detail.data.transport.route_id) : '');
   }, [detail.data]);
 
   const save = useMutation({
@@ -84,6 +91,7 @@ export function EditFeesPage() {
       api.put(`/fees/students/${id}`, {
         months: Number(months) || 0,
         discount_reason: reason,
+        transport_route_id: routeId ? Number(routeId) : null,
         items: toItems(rows),
       }),
     onSuccess: async () => {
@@ -103,6 +111,16 @@ export function EditFeesPage() {
   const change = (type: ChargeType, patch: Partial<Row>) =>
     setRows((old) => old.map((r) => (r.type === type ? { ...r, ...patch } : r)));
   const rate = d.rate;
+  // Routes of this student's school that are open, plus the one they already use.
+  const routeChoices = (routes.data ?? []).filter(
+    (x) => x.branch_id === d.student.branch_id && (x.active || String(x.id) === routeId),
+  );
+  const chooseRoute = (value: string) => {
+    setRouteId(value);
+    const route = routeChoices.find((x) => String(x.id) === value);
+    // Choosing a route fills in its monthly fee; choosing none takes the transport fee away.
+    change('transport', { amount: route ? String(route.monthly_fee) : '0' });
+  };
 
   return (
     <form
@@ -143,7 +161,7 @@ export function EditFeesPage() {
             onClick={() =>
               setRows((old) =>
                 old.map((r) =>
-                  Number(r.amount) > 0
+                  Number(r.amount) > 0 && r.type !== 'previous_dues'
                     ? { ...r, discount_type: allType, discount_value: allValue }
                     : r,
                 ),
@@ -168,7 +186,14 @@ export function EditFeesPage() {
             <Button
               small
               onClick={() => {
-                setRows(toRows(itemsFromRate(rate)));
+                // Previous dues and transport are not on the rate chart, so they stay as they are.
+                setRows((old) =>
+                  toRows(itemsFromRate(rate)).map((row) =>
+                    row.type === 'previous_dues' || row.type === 'transport'
+                      ? old.find((o) => o.type === row.type)!
+                      : row,
+                  ),
+                );
                 setMonths('12');
               }}
             >
@@ -181,12 +206,40 @@ export function EditFeesPage() {
       {rows.map((r) => {
         const item = plan.items.find((i) => i.type === r.type)!;
         const label = t(CHARGE_LABELS[r.type]);
-        const monthly = r.type === 'monthly';
+        const monthly = isMonthlyType(r.type);
         return (
           <div key={r.type} className="card fee-row">
             <strong className="fee-row-title">
-              {monthly ? t('Monthly fee (each month)') : label}
+              {monthly ? t('{fee} (each month)', { fee: label }) : label}
             </strong>
+            {r.type === 'previous_dues' && (
+              <p className="muted small fee-row-note">
+                {t('Dues carried over from earlier years. They are cleared before the other fees.')}
+              </p>
+            )}
+            {r.type === 'transport' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <SelectField
+                  label={t('Transport route')}
+                  hint={
+                    routeChoices.length === 0
+                      ? t(
+                          'No route is set up for this school yet. The admin adds routes under Transport routes.',
+                        )
+                      : t(
+                          'Where the student travels from and to. Choosing a route fills in its monthly fee.',
+                        )
+                  }
+                  value={routeId}
+                  placeholder={t('No transport')}
+                  onChange={chooseRoute}
+                  options={routeChoices.map((x) => ({
+                    value: String(x.id),
+                    label: `${x.source} → ${x.destination} (${inr(x.monthly_fee)})`,
+                  }))}
+                />
+              </div>
+            )}
             {r.type === 'practical' && rate && rate.practical_alt > 0 ? (
               <SelectField
                 label={t('{fee}: amount', { fee: label })}

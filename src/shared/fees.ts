@@ -194,8 +194,8 @@ export function groupRates(
 
 // ── Student fees: every money calculation lives below, as pure functions ─────
 
-/** The seven fee types a student is charged. The six one-time charges are cleared first, in this order. */
-export const ONE_TIME_TYPES = [
+/** One-time charges that come from the rate chart. */
+export const RATE_ONE_TIME_TYPES = [
   'registration',
   'admission',
   'board',
@@ -203,9 +203,21 @@ export const ONE_TIME_TYPES = [
   'practical',
   'tbdb',
 ] as const;
-export const CHARGE_TYPES = [...ONE_TIME_TYPES, 'monthly'] as const;
+/**
+ * Every one-time charge a student can have, in the order they are cleared: dues carried over
+ * from earlier years first (the oldest), then the charges from the rate chart.
+ */
+export const ONE_TIME_TYPES = ['previous_dues', ...RATE_ONE_TIME_TYPES] as const;
+/** Charged every month with the tuition fee, so they are cleared and counted month by month. */
+export const MONTHLY_TYPES = ['monthly', 'transport'] as const;
+export const CHARGE_TYPES = [...ONE_TIME_TYPES, ...MONTHLY_TYPES] as const;
 export type ChargeType = (typeof CHARGE_TYPES)[number];
+export type RateChargeType = (typeof RATE_ONE_TIME_TYPES)[number] | 'monthly';
+export const isMonthlyType = (type: ChargeType): boolean =>
+  (MONTHLY_TYPES as readonly string[]).includes(type);
 export const CHARGE_LABELS: Record<ChargeType, string> = {
+  previous_dues: 'Previous dues',
+  transport: 'Transport',
   registration: 'Registration',
   admission: 'Admission',
   board: 'Board fee / registration',
@@ -248,7 +260,9 @@ export function itemsFromRate(rate: FeeAmounts, higherPractical = false): FeeIte
     amount:
       type === 'practical' && higherPractical && rate.practical_alt > 0
         ? rate.practical_alt
-        : rate[type],
+        : type === 'previous_dues' || type === 'transport'
+          ? 0
+          : rate[type],
     discount_type: 'none' as const,
     discount_value: 0,
     discount: 0,
@@ -290,7 +304,7 @@ export function planTotals(plan: FeePlan): PlanTotals {
   let monthly_gross = 0;
   let monthly_net = 0;
   for (const item of plan.items) {
-    if (item.type === 'monthly') {
+    if (isMonthlyType(item.type)) {
       monthly_gross += item.amount;
       monthly_net += item.amount - item.discount;
     } else {
@@ -428,7 +442,7 @@ export function allocate(
     return paid;
   };
   const one_time = plan.items
-    .filter((i) => i.type !== 'monthly' && i.amount > 0)
+    .filter((i) => !isMonthlyType(i.type) && i.amount > 0)
     .map((i) => {
       const net = i.amount - i.discount;
       const paid = take(net);
@@ -457,6 +471,91 @@ export function allocate(
     return { index, year, month, net: charged ? monthlyNet : 0, paid, status };
   });
   return { one_time, months };
+}
+
+// ── Late fee ────────────────────────────────────────────────────────────────
+
+/** Rupees charged for each day a month's fee stays unpaid after the 20th of that month. */
+export const LATE_FEE_PER_DAY = 5;
+/** The last day of the month on which a month's fee can be paid without a late fee. */
+export const LATE_FEE_AFTER_DAY = 20;
+
+export interface LateFeeMonth {
+  index: number;
+  year: number;
+  month: number;
+  /** The last day without a late fee (the 20th). */
+  due_date: string;
+  /** The day the month was fully paid, or null while it is still unpaid. */
+  cleared_on: string | null;
+  days: number;
+  fee: number;
+}
+export interface LateFee {
+  /** Everything that has built up so far, whether paid, waived or not. */
+  accrued: number;
+  paid: number;
+  waived: number;
+  /** Still to pay: accrued less paid and waived. A student who has left owes none. */
+  outstanding: number;
+  /** The months that carry a late fee (only the ones that were paid late or are late now). */
+  months: LateFeeMonth[];
+}
+
+const daysBetween = (from: string, to: string): number =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/**
+ * The late fee: LATE_FEE_PER_DAY for every day after the 20th that a month's fee was unpaid,
+ * counted up to the day it was paid, or up to today while it is still unpaid. Payments clear
+ * charges oldest first, so a month counts as paid on the day the money settled so far
+ * (payments plus counter discounts, late fees themselves excluded) first covered the one-time
+ * charges and every month up to it. There is no cap.
+ *
+ * `payments` are the receipts that count, oldest first. Months whose 20th came before the
+ * student joined (`joinedOn`) carry no late fee, so a new admission is not charged for the
+ * months before they arrived.
+ */
+export function lateFee(
+  plan: FeePlan,
+  session: { start_year: number; start_month: number },
+  payments: { date: string; settled: number }[],
+  today: string,
+  money: { paid: number; waived: number; left?: boolean; joinedOn?: string | null },
+): LateFee {
+  const totals = planTotals(plan);
+  const ordered = payments
+    .map((p, i) => ({ ...p, i }))
+    .sort((a, b) => (a.date === b.date ? a.i - b.i : a.date < b.date ? -1 : 1));
+  const months: LateFeeMonth[] = [];
+  let cumulative = 0;
+  let next = 0;
+  for (let index = 0; index < Math.min(12, plan.months) && totals.monthly_net > 0; index++) {
+    const m = session.start_month - 1 + index;
+    const year = session.start_year + Math.floor(m / 12);
+    const month = (m % 12) + 1;
+    const due_date = `${year}-${String(month).padStart(2, '0')}-${LATE_FEE_AFTER_DAY}`;
+    const needed = totals.one_time_net + totals.monthly_net * (index + 1);
+    let cleared_on: string | null = null;
+    while (next < ordered.length && cumulative < needed) cumulative += ordered[next++]!.settled;
+    if (cumulative >= needed) {
+      // The payment that crossed `needed` is the last one taken: its date is the clearing day.
+      cleared_on = ordered[Math.max(0, next - 1)]?.date ?? null;
+    }
+    if (money.joinedOn && due_date < money.joinedOn) continue;
+    const end = cleared_on ?? today;
+    const days = end > due_date ? daysBetween(due_date, end) : 0;
+    if (days > 0)
+      months.push({ index, year, month, due_date, cleared_on, days, fee: days * LATE_FEE_PER_DAY });
+  }
+  const accrued = months.reduce((sum, m) => sum + m.fee, 0);
+  return {
+    accrued,
+    paid: money.paid,
+    waived: money.waived,
+    outstanding: money.left ? 0 : Math.max(0, accrued - money.paid - money.waived),
+    months,
+  };
 }
 
 export const MONTH_NAMES = [

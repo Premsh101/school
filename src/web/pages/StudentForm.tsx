@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import type { StudentFeeDetail, TransportRoute } from '../../shared/fees-api';
+import { formatINR } from '../../shared/format';
 import type { StudentDetail } from '../../shared/types';
 import { api } from '../app/api';
 import { useBoot } from '../app/boot';
@@ -47,6 +49,18 @@ export function StudentFormPage() {
   });
   const set = (key: keyof typeof person) => (value: string) =>
     setPerson((old) => ({ ...old, [key]: value }));
+  // Fees that are not on the rate chart: dues from earlier years (old students) and transport.
+  const canExtras = !editing && boot.modules.fees !== false && boot.can('fees.edit');
+  const [previousDues, setPreviousDues] = useState('');
+  const [routeId, setRouteId] = useState('');
+  const routes = useQuery({
+    queryKey: ['fees', 'transport-routes'],
+    queryFn: () => api.get<TransportRoute[]>('/fees/transport-routes'),
+    enabled: canExtras,
+  });
+  const routeChoices = (routes.data ?? []).filter(
+    (x) => x.active && (!place.branch_id || x.branch_id === place.branch_id),
+  );
 
   const existing = useQuery({
     queryKey: ['student', id],
@@ -60,18 +74,57 @@ export function StudentFormPage() {
     }
   }, [existing.data]);
 
+  const dues = place.admission_type === 'old' ? Number(previousDues) || 0 : 0;
+  const route = routeChoices.find((x) => String(x.id) === routeId);
   const save = useMutation({
-    mutationFn: () =>
-      editing
-        ? api.put<{ ok: true; id?: number }>(`/students/${id}`, person)
-        : api.post<{ ok: true; id?: number }>('/students', {
-            ...person,
-            session_id: boot.session?.id,
-            enrolment: placeToInput(place),
-          }),
-    onSuccess: async (res) => {
+    mutationFn: async () => {
+      if (editing)
+        return {
+          res: await api.put<{ ok: true; id?: number }>(`/students/${id}`, person),
+          extras: true,
+        };
+      const res = await api.post<{ ok: true; id?: number }>('/students', {
+        ...person,
+        session_id: boot.session?.id,
+        enrolment: placeToInput(place),
+      });
+      if (!canExtras || (dues <= 0 && !route)) return { res, extras: true };
+      // The student is saved; now add the previous dues and transport to their fees. If this
+      // part fails the student is not lost: the fees can be completed under Edit fees.
+      try {
+        const student = await api.get<StudentDetail>(`/students/${res.id}`);
+        const enrolment = student.enrolments[0]!;
+        const fees = await api.get<StudentFeeDetail>(`/fees/students/${enrolment.id}`);
+        await api.put(`/fees/students/${enrolment.id}`, {
+          months: fees.plan.months,
+          discount_reason: fees.discount_reason,
+          transport_route_id: route ? route.id : null,
+          items: fees.plan.items.map((i) => ({
+            type: i.type,
+            amount:
+              i.type === 'previous_dues'
+                ? dues
+                : i.type === 'transport' && route
+                  ? route.monthly_fee
+                  : i.amount,
+            discount_type: i.discount_type,
+            discount_value: i.discount_value,
+          })),
+        });
+        return { res, extras: true };
+      } catch {
+        return { res, extras: false };
+      }
+    },
+    onSuccess: async ({ res, extras }) => {
       await client.invalidateQueries();
-      toast(editing ? t('Changes saved') : t('Student added'));
+      toast(
+        !extras
+          ? t('Student added, but the extra fees could not be saved. Add them under Edit fees.')
+          : editing
+            ? t('Changes saved')
+            : t('Student added'),
+      );
       navigate(`/students/${editing ? id : res.id}`, { replace: true });
     },
   });
@@ -146,9 +199,8 @@ export function StudentFormPage() {
             placeholder={t('Not set')}
             onChange={set('gender')}
             options={[
-              { value: 'male', label: t('Boy') },
-              { value: 'female', label: t('Girl') },
-              { value: 'other', label: t('Other') },
+              { value: 'male', label: t('Male') },
+              { value: 'female', label: t('Female') },
             ]}
           />
         </div>
@@ -171,6 +223,30 @@ export function StudentFormPage() {
         <div className="card stack">
           <h2>{t('Class for session {name}', { name: boot.session?.name ?? '' })}</h2>
           <PlaceFields value={place} onChange={setPlace} errors={err} />
+          {canExtras && place.admission_type === 'old' && (
+            <TextField
+              label={t('Old dues (₹)')}
+              hint={t(
+                'Fees this student still owes from earlier years, if any. They are collected before the other fees.',
+              )}
+              value={previousDues}
+              onChange={(v) => setPreviousDues(v.replace(/\D/g, '').slice(0, 7))}
+              inputMode="numeric"
+            />
+          )}
+          {canExtras && routes.data && routeChoices.length > 0 && (
+            <SelectField
+              label={t('Transport route')}
+              hint={t('Leave empty if the student does not use school transport.')}
+              value={routeId}
+              placeholder={t('No transport')}
+              onChange={setRouteId}
+              options={routeChoices.map((x) => ({
+                value: String(x.id),
+                label: `${x.source} → ${x.destination} (${formatINR(x.monthly_fee)} ${t('a month')})`,
+              }))}
+            />
+          )}
         </div>
       )}
       <ErrorNote error={save.error} />

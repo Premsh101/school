@@ -32,6 +32,12 @@ what a person cannot use.
   an admin resetting someone's password signs them out everywhere.
 - **Sessions:** named like `2026-27`, starting in April. One is current. The session picker
   in the top bar lets anyone look at another year.
+- **Gender** is Male or Female (or not set). A student saved as "Other" by the first release is read as not set, so they can still be edited.
+- **Cancelling a registration** (admin and management, More → a student → Cancel registration):
+  needs a reason and a date. The student's class record for that session is marked as left
+  (so they owe nothing further and what they paid stays in collections) and keeps the reason,
+  who cancelled it and when; the student page says "Registration cancelled" and the leavers
+  report shows the reason. Setting the student back to Studying undoes it.
 - **Students:** one record per person, plus one class record (enrolment) per session.
   - Admission number is unique across the school. Leave it empty to get the next number.
   - Roll number is unique within branch + class + section + session.
@@ -69,22 +75,22 @@ search, sorting, totals, Excel download and print).
 
 ## API (all under `/api`)
 
-| Route                                                                                                       | Permission                                 |
-| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `GET /bootstrap`, `POST /setup`, `POST /auth/login`, `POST /auth/logout`                                    | open                                       |
-| `POST /auth/password`, `GET /home`, `GET /subjects`                                                         | signed in                                  |
-| `GET /students`, `GET /students/:id`                                                                        | `students.view`                            |
-| `POST /students`, `PUT /students/:id`, `POST /students/:id/enrolments`, `PUT /enrolments/:id`               | `students.edit`                            |
-| `POST /students/import` (`?commit=1` to save)                                                               | `students.import`                          |
-| `GET /promotion/candidates`, `POST /promotion`                                                              | `students.promote`                         |
-| `GET /staff`                                                                                                | `staff.view`                               |
-| `POST /staff`, `PUT /staff/:id`                                                                             | `staff.edit`                               |
-| `POST /sections`, `PUT /sections/:id/active`                                                                | `structure.edit`                           |
-| `GET/POST /users`, `PUT /users/:id`                                                                         | `users.manage`                             |
-| `POST/PUT /branches`, `POST /sessions`, `POST /sessions/:id/current`, `POST/PUT /subjects`, `PUT /settings` | `school.manage`                            |
-| `GET /audit`                                                                                                | `audit.view`                               |
-| `GET /backup`, `GET /backup/:table`                                                                         | `backup.manage`                            |
-| `POST /restore/begin`, `/restore/chunk`, `/restore/finish`                                                  | open, only while the database has no users |
+| Route                                                                                                                                     | Permission                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `GET /bootstrap`, `POST /setup`, `POST /auth/login`, `POST /auth/logout`                                                                  | open                                       |
+| `POST /auth/password`, `GET /home`, `GET /subjects`                                                                                       | signed in                                  |
+| `GET /students`, `GET /students/:id`                                                                                                      | `students.view`                            |
+| `POST /students`, `PUT /students/:id`, `POST /students/:id/enrolments`, `PUT /enrolments/:id`, `POST /enrolments/:id/cancel-registration` | `students.edit`                            |
+| `POST /students/import` (`?commit=1` to save)                                                                                             | `students.import`                          |
+| `GET /promotion/candidates`, `POST /promotion`                                                                                            | `students.promote`                         |
+| `GET /staff`                                                                                                                              | `staff.view`                               |
+| `POST /staff`, `PUT /staff/:id`                                                                                                           | `staff.edit`                               |
+| `POST /sections`, `PUT /sections/:id/active`                                                                                              | `structure.edit`                           |
+| `GET/POST /users`, `PUT /users/:id`                                                                                                       | `users.manage`                             |
+| `POST/PUT /branches`, `POST /sessions`, `POST /sessions/:id/current`, `POST/PUT /subjects`, `PUT /settings`                               | `school.manage`                            |
+| `GET /audit`                                                                                                                              | `audit.view`                               |
+| `GET /backup`, `GET /backup/:table`                                                                                                       | `backup.manage`                            |
+| `POST /restore/begin`, `/restore/chunk`, `/restore/finish`                                                                                | open, only while the database has no users |
 
 ## Adding a module
 

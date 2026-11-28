@@ -178,7 +178,9 @@ describe('student fees', () => {
     e = await addStudent('Nine New', 12, { roll_no: 1 });
     const d = (await owner.get(`/fees/students/${e}`)).data;
     expect(d.plan.months).toBe(12);
+    // Previous dues and transport are part of every plan, at 0 until someone adds them.
     expect(d.plan.items.map((i: any) => [i.type, i.amount])).toEqual([
+      ['previous_dues', 0],
       ['registration', 200],
       ['admission', 3500],
       ['board', 1000],
@@ -186,6 +188,7 @@ describe('student fees', () => {
       ['practical', 600],
       ['tbdb', 700],
       ['monthly', 1200],
+      ['transport', 0],
     ]);
     expect(d.due_at_admission).toBe(7200);
     expect(d.position).toMatchObject({

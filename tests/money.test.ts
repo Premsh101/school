@@ -7,6 +7,7 @@ import {
   dueAtAdmission,
   feePosition,
   itemsFromRate,
+  lateFee,
   monthsStarted,
   planTotals,
   quickAmounts,
@@ -206,5 +207,170 @@ describe('amount in words (Indian system)', () => {
       'One crore twenty three lakh forty five thousand six hundred seventy eight rupees only',
     );
     expect(() => amountInWords(10.5)).toThrow();
+  });
+});
+
+describe('previous dues and transport', () => {
+  const nursery = DEFAULT_RATE_CHART[0]!.old; // annual 1800, monthly 700
+  const withExtra = (previous: number, transport: number): FeePlan => {
+    const base = plan(nursery);
+    return {
+      months: 12,
+      items: withDiscounts(
+        base.items.map((i) =>
+          i.type === 'previous_dues'
+            ? { ...i, amount: previous }
+            : i.type === 'transport'
+              ? { ...i, amount: transport }
+              : i,
+        ),
+      ),
+    };
+  };
+
+  it('adds previous dues as a one-time charge and transport to every month', () => {
+    const t = planTotals(withExtra(2500, 300));
+    expect(t.one_time_net).toBe(1800 + 2500);
+    expect(t.monthly_net).toBe(700 + 300);
+    expect(t.net).toBe(1800 + 2500 + 1000 * 12);
+  });
+
+  it('clears previous dues first, before the rest of the one-time charges', () => {
+    const a = allocate(withExtra(2500, 0), 3000, session, 12);
+    expect(a.one_time.map((c) => [c.type, c.paid])).toEqual([
+      ['previous_dues', 2500],
+      ['annual', 500],
+    ]);
+  });
+
+  it('counts transport inside each month, so a month is paid only when both are', () => {
+    const p = withExtra(0, 300); // one-time 1800, a month = 1000
+    const a = allocate(p, 1800 + 1000 + 400, session, 12);
+    expect(a.months.slice(0, 3).map((m) => [m.paid, m.status])).toEqual([
+      [1000, 'paid'],
+      [400, 'part'],
+      [0, 'due'],
+    ]);
+    expect(dueAtAdmission(p)).toBe(1800 + 1000);
+  });
+
+  it('can discount transport and previous dues like any other fee', () => {
+    const base = withExtra(2000, 300);
+    const p: FeePlan = {
+      months: 12,
+      items: withDiscounts(
+        base.items.map((i) =>
+          i.type === 'transport'
+            ? { ...i, discount_type: 'percent' as const, discount_value: 50 }
+            : i.type === 'previous_dues'
+              ? { ...i, discount_type: 'amount' as const, discount_value: 500 }
+              : i,
+        ),
+      ),
+    };
+    const t = planTotals(p);
+    expect(t.one_time_net).toBe(1800 + 1500);
+    expect(t.monthly_net).toBe(700 + 150);
+  });
+
+  it('copes with fees saved before these charges existed', () => {
+    const old = {
+      items: plan(nursery).items.filter(
+        (i) => i.type !== 'transport' && i.type !== 'previous_dues',
+      ),
+      months: 12,
+    };
+    const filled = withDiscounts(old.items);
+    expect(filled.map((i) => i.type)).toContain('previous_dues');
+    expect(planTotals({ items: filled, months: 12 }).net).toBe(1800 + 700 * 12);
+  });
+});
+
+describe('late fee', () => {
+  // Class 9 old: one-time = board 1000 + annual 2500 + practical 600 = 4100, a month = 1200.
+  const old9 = DEFAULT_RATE_CHART[3]!.old;
+  const p = plan(old9);
+  const none = { paid: 0, waived: 0 };
+
+  it('charges ₹5 a day after the 20th for a month that is still unpaid', () => {
+    // Nothing paid. Today is 25 April: April's fee is 5 days late; nothing else has started.
+    const late = lateFee(p, session, [], '2026-04-25', none);
+    expect(late.months).toHaveLength(1);
+    expect(late.months[0]).toMatchObject({
+      due_date: '2026-04-20',
+      cleared_on: null,
+      days: 5,
+      fee: 25,
+    });
+    expect(late.accrued).toBe(25);
+    expect(late.outstanding).toBe(25);
+  });
+
+  it('has no late fee on or before the 20th', () => {
+    expect(lateFee(p, session, [], '2026-04-20', none).accrued).toBe(0);
+    expect(lateFee(p, session, [], '2026-04-21', none).accrued).toBe(5);
+  });
+
+  it('stops counting on the day the month was paid', () => {
+    // 4,100 + 1,200 settled on 24 April clears April: 4 days late. The rest of the year is not due yet.
+    const late = lateFee(p, session, [{ date: '2026-04-24', settled: 5300 }], '2026-06-10', none);
+    expect(late.months[0]).toMatchObject({ cleared_on: '2026-04-24', days: 4, fee: 20 });
+    // May's 20th has passed with nothing more paid: 21 days by 10 June.
+    expect(late.months[1]).toMatchObject({ cleared_on: null, due_date: '2026-05-20', days: 21 });
+    expect(late.accrued).toBe(20 + 21 * 5 + 0);
+  });
+
+  it('finds the day each month was cleared when one payment covers several months', () => {
+    const late = lateFee(
+      p,
+      session,
+      [
+        { date: '2026-04-30', settled: 5300 }, // April, 10 days late
+        { date: '2026-06-15', settled: 2400 }, // May and June: May 26 days late, June on time
+      ],
+      '2026-06-30',
+      none,
+    );
+    // June was paid on the 15th, before its 20th, so it carries no late fee and is not listed.
+    expect(late.months.map((m) => [m.month, m.cleared_on, m.fee])).toEqual([
+      [4, '2026-04-30', 50],
+      [5, '2026-06-15', 26 * 5],
+    ]);
+  });
+
+  it('counts a counter discount as paid on the day it was given', () => {
+    const late = lateFee(p, session, [{ date: '2026-04-10', settled: 5300 }], '2026-04-30', none);
+    expect(late.accrued).toBe(0);
+  });
+
+  it('takes off what was paid and waived, and never goes below zero', () => {
+    const accrued = lateFee(p, session, [], '2026-04-30', none).accrued; // 10 days = 50
+    expect(accrued).toBe(50);
+    expect(lateFee(p, session, [], '2026-04-30', { paid: 30, waived: 0 }).outstanding).toBe(20);
+    expect(lateFee(p, session, [], '2026-04-30', { paid: 0, waived: 50 }).outstanding).toBe(0);
+    expect(lateFee(p, session, [], '2026-04-30', { paid: 40, waived: 40 }).outstanding).toBe(0);
+  });
+
+  it('does not charge for months before the student joined', () => {
+    // Joined 25 June: the 20ths of April, May and June passed before that, so they carry nothing.
+    const late = lateFee(p, session, [], '2026-07-05', { ...none, joinedOn: '2026-06-25' });
+    expect(late.accrued).toBe(0);
+    // By 25 July, July's fee is 5 days late.
+    const later = lateFee(p, session, [], '2026-07-25', { ...none, joinedOn: '2026-06-25' });
+    expect(later.months.map((m) => [m.month, m.fee])).toEqual([[7, 25]]);
+  });
+
+  it('has no cap, and a student who has left owes none', () => {
+    const late = lateFee(p, session, [], '2026-11-27', none);
+    // April: 221 days (to 27 Nov), the later months fewer. Far more than one month's fee of 1,200.
+    expect(late.months[0]!.fee).toBe(221 * 5);
+    expect(late.accrued).toBeGreaterThan(1200);
+    expect(lateFee(p, session, [], '2026-11-27', { ...none, left: true }).outstanding).toBe(0);
+  });
+
+  it('counts a month only if it is charged', () => {
+    const six = { ...p, months: 6 };
+    expect(lateFee(six, session, [], '2026-12-31', none).months).toHaveLength(6);
+    expect(lateFee({ ...p, months: 0 }, session, [], '2026-12-31', none).accrued).toBe(0);
   });
 });

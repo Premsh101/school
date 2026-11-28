@@ -32,19 +32,20 @@ export const CORE_REPORTS = [
     id: 'students',
     name: 'Student list',
     description: 'Every student with class, roll number, parents and phone numbers.',
-    filters: ['branch', 'class', 'section', 'status'],
+    filters: ['dates', 'branch', 'class', 'section', 'status'],
   },
   {
     id: 'strength',
     name: 'Class strength',
-    description: 'Students in each class and section: boys, girls, new and old, left.',
-    filters: ['branch'],
+    description: 'Students in each class and section: male, female, new and old, left.',
+    filters: ['dates', 'branch'],
   },
   {
     id: 'left',
     name: 'Students who left',
-    description: 'Students marked as left this session, with the date and phone numbers.',
-    filters: ['branch', 'class'],
+    description:
+      'Students marked as left this session, with the date, the reason if the registration was cancelled, and phone numbers.',
+    filters: ['dates', 'branch', 'class'],
   },
 ] as const satisfies readonly ReportDef[];
 export type CoreReportId = (typeof CORE_REPORTS)[number]['id'];

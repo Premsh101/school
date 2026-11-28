@@ -4,6 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { formatDate } from '../../../shared/dates';
 import {
   CHARGE_LABELS,
+  LATE_FEE_AFTER_DAY,
+  LATE_FEE_PER_DAY,
   computeDiscount,
   MODE_LABELS,
   MONTH_NAMES,
@@ -42,6 +44,7 @@ export function StudentFeesPage() {
   const { id } = useParams();
   const boot = useBoot();
   const [cancelling, setCancelling] = useState<ReceiptRow | null>(null);
+  const [waiving, setWaiving] = useState(false);
   const detail = useQuery({
     queryKey: ['fees', 'student', id],
     queryFn: () => api.get<StudentFeeDetail>(`/fees/students/${id}`),
@@ -51,6 +54,7 @@ export function StudentFeesPage() {
   const d = detail.data;
   const { student: s, position: p } = d;
   const left = s.status === 'left';
+  const late = d.late_fee;
   return (
     <div className="stack">
       <PageHead title={s.name} back="/fees/collect">
@@ -72,9 +76,14 @@ export function StudentFeesPage() {
       </p>
       {left && (
         <p className="note info">
-          {t(
-            'This student has left the school and owes nothing further. What they paid stays in the collections.',
-          )}
+          {s.cancel_reason
+            ? t(
+                'The registration was cancelled: {reason}. The student owes nothing further. What they paid stays in the collections.',
+                { reason: s.cancel_reason },
+              )
+            : t(
+                'This student has left the school and owes nothing further. What they paid stays in the collections.',
+              )}
         </p>
       )}
 
@@ -94,10 +103,32 @@ export function StudentFeesPage() {
             tone={p.overdue > 0 ? 'overdue' : undefined}
             sub={t('Due as of today: {amount}', { amount: inr(p.due_today) })}
           />
+          {late.accrued > 0 && (
+            <Stat
+              label={t('Late fee owed')}
+              value={inr(late.outstanding)}
+              tone={late.outstanding > 0 ? 'overdue' : undefined}
+              sub={
+                late.paid || late.waived
+                  ? t('{paid} paid, {waived} waived', {
+                      paid: inr(late.paid),
+                      waived: inr(late.waived),
+                    })
+                  : undefined
+              }
+            />
+          )}
         </div>
+        {d.transport && (
+          <p className="muted small">
+            {t('Transport: {from} to {to}', { from: d.transport.from, to: d.transport.to })}
+          </p>
+        )}
       </section>
 
-      {boot.can('fees.collect') && !left && p.pending > 0 && <CollectForm detail={d} />}
+      {boot.can('fees.collect') && !left && (p.pending > 0 || late.outstanding > 0) && (
+        <CollectForm detail={d} />
+      )}
       {!left && p.pending === 0 && (
         <p className="note ok">{t('Fully paid for {session}.', { session: s.session_name })}</p>
       )}
@@ -118,6 +149,75 @@ export function StudentFeesPage() {
           ))}
         </div>
       </section>
+
+      {late.accrued > 0 && (
+        <section className="stack">
+          <div className="row">
+            <h2>{t('Late fee')}</h2>
+            {boot.can('fees.waive') && late.outstanding > 0 && (
+              <Button small className="right no-print" onClick={() => setWaiving(true)}>
+                {t('Waive late fee')}
+              </Button>
+            )}
+          </div>
+          <p className="muted small">
+            {t(
+              '{rate} a day for every day after the {day}th of the month that a month’s fee is unpaid, up to the day it is paid.',
+              { rate: inr(LATE_FEE_PER_DAY), day: LATE_FEE_AFTER_DAY },
+            )}
+          </p>
+          <div className="table-wrap">
+            <table className="late-table">
+              <thead>
+                <tr>
+                  <th>{t('Month')}</th>
+                  <th>{t('Paid on')}</th>
+                  <th className="num">{t('Days')}</th>
+                  <th className="num">{t('Late fee')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {late.months.map((m) => (
+                  <tr key={m.index}>
+                    <th scope="row">
+                      {t(MONTH_NAMES[m.month - 1]!).slice(0, 3)} {m.year}
+                    </th>
+                    <td>{m.cleared_on ? formatDate(m.cleared_on) : t('Unpaid')}</td>
+                    <td className="num">{m.days}</td>
+                    <td className="num">{inr(m.fee)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row" colSpan={3}>
+                    {t('Total late fee')}
+                  </th>
+                  <td className="num">{inr(late.accrued)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {d.waivers.length > 0 && (
+            <ul className="list">
+              {d.waivers.map((w) => (
+                <li key={w.id}>
+                  <div className="item" style={{ cursor: 'default' }}>
+                    <span className="grow">
+                      <span className="title" style={{ display: 'block' }}>
+                        {t('{amount} waived', { amount: inr(w.amount) })}
+                      </span>
+                      <span className="sub" style={{ display: 'block', whiteSpace: 'normal' }}>
+                        {w.reason} · {w.by_name} · {formatDate(w.at.slice(0, 10))}
+                      </span>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="stack">
         <div className="row">
@@ -150,26 +250,40 @@ export function StudentFeesPage() {
                 </tr>
               ))}
               {d.plan.items
-                .filter((i) => i.type === 'monthly')
+                .filter((i) => i.type === 'monthly' || (i.type === 'transport' && i.amount > 0))
                 .map((i) => (
-                  <tr key="monthly">
-                    <th scope="row">{t('Monthly fee × {n} months', { n: d.plan.months })}</th>
+                  <tr key={i.type}>
+                    <th scope="row">
+                      {i.type === 'transport'
+                        ? t('Transport × {n} months', { n: d.plan.months })
+                        : t('Monthly fee × {n} months', { n: d.plan.months })}
+                    </th>
                     <td className="num">{inr(i.amount)}</td>
                     <td className="num">{i.discount ? inr(i.discount) : '–'}</td>
                     <td className="num">{inr((i.amount - i.discount) * d.plan.months)}</td>
                     <td className="num">
-                      {inr(
-                        d.allocation.months.reduce(
-                          (sum, m) => sum + (m.status === 'waived' ? 0 : m.net - m.paid),
-                          0,
-                        ),
-                      )}
+                      {i.type === 'transport'
+                        ? '–'
+                        : inr(
+                            d.allocation.months.reduce(
+                              (sum, m) => sum + (m.status === 'waived' ? 0 : m.net - m.paid),
+                              0,
+                            ),
+                          )}
                     </td>
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
+        {d.transport && (
+          <p className="muted small">
+            {t(
+              'Transport ({from} to {to}) is paid with the monthly fee: a month is paid when both are paid. The balance shown on the monthly line includes it.',
+              { from: d.transport.from, to: d.transport.to },
+            )}
+          </p>
+        )}
       </section>
 
       <section className="stack">
@@ -191,6 +305,8 @@ export function StudentFeesPage() {
                       style={{ display: 'block' }}
                     >
                       {inr(r.amount)}
+                      {r.late_fee > 0 &&
+                        ` (${t('{amount} late fee', { amount: inr(r.late_fee) })})`}
                       {r.counter_discount > 0 &&
                         ` + ${t('{amount} discount', { amount: inr(r.counter_discount) })}`}
                     </span>
@@ -228,33 +344,52 @@ export function StudentFeesPage() {
         )}
       </section>
       {cancelling && <CancelSheet receipt={cancelling} onClose={() => setCancelling(null)} />}
+      {waiving && <WaiveSheet detail={d} onClose={() => setWaiving(false)} />}
     </div>
   );
 }
+
+type LateChoice = 'take' | 'waive' | 'later';
 
 function CollectForm({ detail }: { detail: StudentFeeDetail }) {
   const boot = useBoot();
   const client = useQueryClient();
   const navigate = useNavigate();
   const { quick, position, student } = detail;
+  const owed = detail.late_fee.outstanding;
   const [amount, setAmount] = useState(String(quick.due_today || quick.one_month));
   const [mode, setMode] = useState<PaymentMode>('cash');
   const [reference, setReference] = useState('');
   const [date, setDate] = useState(boot.today);
   const [extra, setExtra] = useState(false);
+  const [basis, setBasis] = useState<'payment' | 'total'>('payment');
   const [discountType, setDiscountType] = useState<DiscountType>('amount');
   const [discountValue, setDiscountValue] = useState('');
+  const [lateChoice, setLateChoice] = useState<LateChoice>('take');
   const [note, setNote] = useState('');
   const settle = Number(amount) || 0;
-  const discount = extra ? computeDiscount(settle, discountType, Number(discountValue) || 0) : 0;
+  const value = Number(discountValue) || 0;
+  // "This payment": the discount comes out of the amount being cleared.
+  // "Overall": it is worked out on everything still pending and comes off the total fees.
+  const discount = extra
+    ? computeDiscount(basis === 'total' ? position.pending : settle, discountType, value)
+    : 0;
+  const feeCash = basis === 'total' && extra ? settle : Math.max(0, settle - discount);
+  const cleared = basis === 'total' && extra ? settle + discount : settle;
+  const lateTaken = owed > 0 && lateChoice === 'take' ? owed : 0;
+  const waiveLate = owed > 0 && lateChoice === 'waive';
+  const takeNow = feeCash + lateTaken;
   const save = useMutation({
     mutationFn: () =>
       api.post<{ ok: true; id: number }>('/fees/receipts', {
         enrolment_id: student.enrolment_id,
         date,
         settle_amount: settle,
+        discount_basis: extra ? basis : 'payment',
         counter_discount_type: extra && discount > 0 ? discountType : 'none',
-        counter_discount_value: extra && discount > 0 ? Number(discountValue) || 0 : 0,
+        counter_discount_value: extra && discount > 0 ? value : 0,
+        late_fee: lateTaken,
+        waive_late_fee: waiveLate,
         mode,
         reference,
         note,
@@ -265,12 +400,17 @@ function CollectForm({ detail }: { detail: StudentFeeDetail }) {
     },
   });
   const err = fieldErrors(save.error);
-  const quickButton = (label: string, value: number) =>
-    value > 0 && (
-      <Button small aria-pressed={settle === value} onClick={() => setAmount(String(value))}>
-        {label} {inr(value)}
+  const quickButton = (label: string, amountValue: number) =>
+    amountValue > 0 && (
+      <Button
+        small
+        aria-pressed={settle === amountValue}
+        onClick={() => setAmount(String(amountValue))}
+      >
+        {label} {inr(amountValue)}
       </Button>
     );
+  const canSave = cleared > 0 || lateTaken > 0;
   return (
     <form
       className="card stack no-print"
@@ -288,7 +428,9 @@ function CollectForm({ detail }: { detail: StudentFeeDetail }) {
           quickButton(t('Full'), quick.full)}
       </div>
       <TextField
-        label={t('Amount to clear (₹)')}
+        label={
+          extra && basis === 'total' ? t('Amount received for fees (₹)') : t('Amount to clear (₹)')
+        }
         hint={t('Up to {max} is pending.', { max: inr(position.pending) })}
         value={amount}
         onChange={(v) => setAmount(v.replace(/\D/g, ''))}
@@ -296,6 +438,23 @@ function CollectForm({ detail }: { detail: StudentFeeDetail }) {
         inputMode="numeric"
         required
       />
+      {owed > 0 && (
+        <SelectField
+          label={t('Late fee owed: {amount}', { amount: inr(owed) })}
+          hint={t('{rate} a day after the {day}th of each month.', {
+            rate: inr(LATE_FEE_PER_DAY),
+            day: LATE_FEE_AFTER_DAY,
+          })}
+          value={lateChoice}
+          onChange={(v) => setLateChoice(v as LateChoice)}
+          error={err.late_fee}
+          options={[
+            { value: 'take', label: t('Take it now') },
+            ...(boot.can('fees.waive') ? [{ value: 'waive', label: t('Waive it') }] : []),
+            { value: 'later', label: t('Leave it for later') },
+          ]}
+        />
+      )}
       <div className="grid2">
         <SelectField
           label={t('Paid by')}
@@ -323,56 +482,146 @@ function CollectForm({ detail }: { detail: StudentFeeDetail }) {
         />
       )}
       {extra ? (
-        <div className="grid2">
+        <>
           <SelectField
-            label={t('Extra discount')}
-            value={discountType}
-            onChange={(v) => setDiscountType(v as DiscountType)}
+            label={t('Discount on')}
+            hint={
+              basis === 'total'
+                ? t('Worked out on the {amount} still pending, and taken off the total fees.', {
+                    amount: inr(position.pending),
+                  })
+                : t('Taken out of the amount being cleared.')
+            }
+            value={basis}
+            onChange={(v) => setBasis(v === 'total' ? 'total' : 'payment')}
             options={[
-              { value: 'amount', label: t('In rupees (₹)') },
-              { value: 'percent', label: t('In percent (%)') },
+              { value: 'total', label: t('Total fees (overall discount)') },
+              { value: 'payment', label: t('This payment only') },
             ]}
           />
-          <TextField
-            label={discountType === 'percent' ? t('Percent off') : t('Rupees off')}
-            value={discountValue}
-            onChange={(v) => setDiscountValue(v.replace(/\D/g, ''))}
-            error={err.counter_discount_value}
-            inputMode="numeric"
-          />
-        </div>
+          <div className="grid2">
+            <SelectField
+              label={t('Discount')}
+              value={discountType}
+              onChange={(v) => setDiscountType(v as DiscountType)}
+              options={[
+                { value: 'amount', label: t('In rupees (₹)') },
+                { value: 'percent', label: t('In percent (%)') },
+              ]}
+            />
+            <TextField
+              label={discountType === 'percent' ? t('Percent off') : t('Rupees off')}
+              value={discountValue}
+              onChange={(v) => setDiscountValue(v.replace(/\D/g, ''))}
+              error={err.counter_discount_value}
+              inputMode="numeric"
+            />
+          </div>
+        </>
       ) : (
-        <Button small onClick={() => setExtra(true)}>
-          {t('Give an extra discount now')}
+        <Button
+          small
+          onClick={() => {
+            setExtra(true);
+            setBasis('total');
+          }}
+        >
+          {t('Give a discount')}
         </Button>
       )}
-      {(extra || note) && (
+      {(extra || note || waiveLate) && (
         <TextField
           label={t('Note')}
-          hint={t('For example the reason for the discount')}
+          hint={t('For example the reason for the discount or for waiving the late fee')}
           value={note}
           onChange={setNote}
         />
       )}
       <p className="take">
-        {t('Take from parent')}: <strong>{inr(Math.max(0, settle - discount))}</strong>
-        {discount > 0 && (
+        {t('Take from parent')}: <strong>{inr(takeNow)}</strong>
+        {(discount > 0 || lateTaken > 0) && (
           <span className="muted small">
             {' '}
             (
-            {t('{settle} less {discount} discount', {
-              settle: inr(settle),
-              discount: inr(discount),
-            })}
+            {[
+              feeCash > 0 || cleared > 0 ? t('{amount} fees', { amount: inr(feeCash) }) : '',
+              lateTaken > 0 ? t('{amount} late fee', { amount: inr(lateTaken) }) : '',
+              discount > 0 ? t('{amount} discount given', { amount: inr(discount) }) : '',
+            ]
+              .filter(Boolean)
+              .join(' + ')}
             )
           </span>
         )}
       </p>
+      {extra && cleared > 0 && (
+        <p className="muted small">
+          {t('Pending after this: {amount}', {
+            amount: inr(Math.max(0, position.pending - cleared)),
+          })}
+        </p>
+      )}
       <ErrorNote error={save.error} />
-      <Button type="submit" variant="primary" block busy={save.isPending} disabled={settle <= 0}>
+      <Button type="submit" variant="primary" block busy={save.isPending} disabled={!canSave}>
         {t('Save and show receipt')}
       </Button>
     </form>
+  );
+}
+
+/** Waives a late fee (all of it or part) with a reason. Admin and management only. */
+function WaiveSheet({ detail, onClose }: { detail: StudentFeeDetail; onClose: () => void }) {
+  const client = useQueryClient();
+  const toast = useToast();
+  const owed = detail.late_fee.outstanding;
+  const [part, setPart] = useState('');
+  const [reason, setReason] = useState('');
+  const waive = useMutation({
+    mutationFn: () =>
+      api.post(`/fees/students/${detail.student.enrolment_id}/late-fee-waiver`, {
+        amount: part ? Number(part) : undefined,
+        reason,
+      }),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ['fees'] });
+      toast(t('Late fee waived'));
+      onClose();
+    },
+  });
+  const err = fieldErrors(waive.error);
+  return (
+    <Sheet title={t('Waive late fee')} onClose={onClose}>
+      <p>
+        {t('{amount} late fee is owed by {name}. A waiver stays on record with your name.', {
+          amount: inr(owed),
+          name: detail.student.name,
+        })}
+      </p>
+      <TextField
+        label={t('Amount to waive (₹)')}
+        hint={t('Leave empty to waive all {amount}.', { amount: inr(owed) })}
+        value={part}
+        onChange={(v) => setPart(v.replace(/\D/g, ''))}
+        error={err.amount}
+        inputMode="numeric"
+      />
+      <TextField
+        label={t('Why is it being waived?')}
+        value={reason}
+        onChange={setReason}
+        error={err.reason}
+      />
+      <ErrorNote error={waive.error} />
+      <Button
+        variant="primary"
+        block
+        busy={waive.isPending}
+        disabled={reason.trim().length < 3}
+        onClick={() => waive.mutate()}
+      >
+        {part ? t('Waive {amount}', { amount: inr(Number(part)) }) : t('Waive all')}
+      </Button>
+    </Sheet>
   );
 }
 

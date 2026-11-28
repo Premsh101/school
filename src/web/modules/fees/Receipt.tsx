@@ -17,6 +17,7 @@ function receiptText(d: ReceiptDetail, className: string): string {
     t('Fee receipt {no}, {date}', { no: r.receipt_no, date: formatDate(r.date) }),
     `${d.student.name}, ${className} ${d.student.section_name}`,
     t('Received {amount} by {mode}', { amount: inr(r.amount), mode: t(MODE_LABELS[r.mode]) }) +
+      (r.late_fee ? `, ${t('including late fee {amount}', { amount: inr(r.late_fee) })}` : '') +
       (r.counter_discount
         ? `, ${t('discount {amount}', { amount: inr(r.counter_discount) })}`
         : ''),
@@ -97,6 +98,7 @@ export function ReceiptPage() {
           {line(t('Admission no'), s.admission_no)}
           {r.covers && line(t('Received for'), r.covers)}
           {line(t('Paid by'), `${t(MODE_LABELS[r.mode])}${r.reference ? ` (${r.reference})` : ''}`)}
+          {r.late_fee > 0 && line(t('Late fee included'), inr(r.late_fee))}
           {r.counter_discount > 0 && line(t('Discount given'), inr(r.counter_discount))}
           {r.note && line(t('Note'), r.note)}
         </dl>
@@ -108,6 +110,7 @@ export function ReceiptPage() {
         <dl className="kv">
           {line(t('Balance for the year'), inr(d.pending))}
           {d.overdue > 0 && line(t('Overdue today'), inr(d.overdue))}
+          {d.late_fee > 0 && line(t('Late fee still owed'), inr(d.late_fee))}
         </dl>
         <footer>
           <span>{t('Received by: {name}', { name: r.collected_by_name })}</span>

@@ -1,4 +1,4 @@
-import type { Allocation, FeeAmounts, FeePlan, FeePosition, PaymentMode } from './fees';
+import type { Allocation, FeeAmounts, FeePlan, FeePosition, LateFee, PaymentMode } from './fees';
 import type { ReportDef } from './reports';
 
 // Shapes of the fees API answers, shared by the Worker and the web app.
@@ -13,7 +13,10 @@ export interface ReceiptRow {
   id: number;
   receipt_no: string;
   date: string;
+  /** Money received, late fee included. */
   amount: number;
+  /** The part of `amount` that is a late fee. */
+  late_fee: number;
   counter_discount: number;
   mode: PaymentMode;
   reference: string;
@@ -40,6 +43,10 @@ export interface FeeStudent {
   roll_no: number | null;
   admission_type: 'new' | 'old';
   status: 'studying' | 'left';
+  /** Set when the registration was cancelled (the student is then also marked as left). */
+  cancel_reason: string | null;
+  /** The day the student joined this session (India date); months before it carry no late fee. */
+  joined_on: string;
   session_id: number;
   session_name: string;
   start_year: number;
@@ -56,6 +63,10 @@ export interface StudentFeeDetail {
   allocation: Allocation;
   due_at_admission: number;
   quick: { due_today: number; one_month: number; full: number };
+  late_fee: LateFee;
+  waivers: { id: number; amount: number; reason: string; by_name: string; at: string }[];
+  /** The transport route chosen for the student, if any. */
+  transport: { route_id: number | null; from: string; to: string } | null;
   /** Newest first, cancelled ones included. */
   receipts: ReceiptRow[];
 }
@@ -73,6 +84,17 @@ export interface CollectRow {
   status: 'studying' | 'left';
   pending: number;
   overdue: number;
+  /** Late fee owed now (0 for a student who has left). */
+  late_fee: number;
+}
+
+export interface TransportRoute {
+  id: number;
+  branch_id: number;
+  source: string;
+  destination: string;
+  monthly_fee: number;
+  active: number;
 }
 
 export interface ReceiptDetail {
@@ -83,6 +105,8 @@ export interface ReceiptDetail {
   /** The student's position now, after this receipt. */
   pending: number;
   overdue: number;
+  /** Late fee still owed now. */
+  late_fee: number;
 }
 
 export interface MoneySums {
@@ -123,7 +147,7 @@ export interface FeesDashboard {
   last_14_days: { date: string; amount: number }[];
   /** Payment modes within the chosen date range. */
   by_mode: { mode: PaymentMode; amount: number; receipts: number }[];
-  largest_dues: (CollectRow & { phone2: string })[];
+  largest_dues: (Omit<CollectRow, 'late_fee'> & { phone2: string })[];
   latest_receipts: {
     id: number;
     receipt_no: string;
@@ -154,31 +178,38 @@ export const REPORTS = [
     id: 'pending',
     name: 'Pending dues',
     description: 'Who owes how much, due today or for the whole year, with phone numbers.',
-    filters: ['basis', 'min', 'branch', 'class', 'section'],
+    filters: ['dates', 'basis', 'min', 'branch', 'class', 'section'],
+  },
+  {
+    id: 'classpending',
+    name: 'Class-wise pending list',
+    description:
+      'Every student of a class with what they owe: due today, pending for the year and late fee, with phone numbers.',
+    filters: ['dates', 'branch', 'class', 'section'],
   },
   {
     id: 'register',
     name: 'Fee register',
     description: 'One line per student: fee, discount, paid, pending and overdue.',
-    filters: ['branch', 'class', 'section'],
+    filters: ['dates', 'branch', 'class', 'section'],
   },
   {
     id: 'classwise',
     name: 'Class-wise summary',
     description: 'Fee totals for each class: to pay, collected, pending and overdue.',
-    filters: ['branch'],
+    filters: ['dates', 'branch'],
   },
   {
     id: 'branchwise',
     name: 'School-wise summary',
     description: 'Fee totals for each school, side by side.',
-    filters: [],
+    filters: ['dates'],
   },
   {
     id: 'discounts',
     name: 'Discounts given',
     description: 'Every discount by fee type with its reason, plus discounts given at the counter.',
-    filters: ['branch', 'class'],
+    filters: ['dates', 'branch', 'class'],
   },
   {
     id: 'staff',

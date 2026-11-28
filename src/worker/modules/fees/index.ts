@@ -9,7 +9,7 @@ export const feesModule: WorkerModule = {
   routes,
   permissions: FEES_PERMISSIONS,
   rolePermissions: FEES_ROLE_PERMISSIONS,
-  backupTables: ['fee_rates', 'student_fees', 'receipts'],
+  backupTables: ['fee_rates', 'transport_routes', 'student_fees', 'receipts', 'late_fee_waivers'],
   // A new session starts with each branch's previous chart (or the printed one).
   onSessionOpened: (c, _from, to) =>
     ensureRates(

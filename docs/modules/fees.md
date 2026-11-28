@@ -5,11 +5,11 @@ reports. All money is whole rupees. Nothing financial is ever deleted.
 
 ## Who can do what
 
-| Role       | See fees, dashboard, reports  | Collect | Edit a student's fees | Cancel a receipt | Edit the rate chart |
-| ---------- | ----------------------------- | ------- | --------------------- | ---------------- | ------------------- |
-| Admin      | chosen school, or all schools | yes     | yes                   | yes              | yes                 |
-| Management | chosen school, or all schools | yes     | yes                   | yes              | no                  |
-| Accountant | their assigned school         | yes     | yes                   | no               | no                  |
+| Role       | See fees, dashboard, reports  | Collect | Edit a student's fees | Cancel a receipt, waive a late fee | Edit the rate chart, transport routes |
+| ---------- | ----------------------------- | ------- | --------------------- | ---------------------------------- | ------------------------------------- |
+| Admin      | chosen school, or all schools | yes     | yes                   | yes                                | yes                                   |
+| Management | chosen school, or all schools | yes     | yes                   | yes                                | no                                    |
+| Accountant | their assigned school         | yes     | yes                   | no                                 | no                                    |
 
 ## Rate chart
 
@@ -57,7 +57,18 @@ All of these live in one pure module, `src/shared/fees.ts`, with unit tests in
   month. Percent discounts round to the nearest rupee. The type, the value and the
   resulting rupees are all stored. Shortcuts: same discount on all fees, clear discounts,
   reset to rate chart. A reason (sibling, staff ward, merit…) is kept.
-- **Counter discount:** an extra ₹ or % off the amount being cleared, recorded on the receipt.
+- **Discount while paying** (recorded on the receipt, "counter discount"), two ways:
+  - **Total fees (overall discount):** ₹ or % worked out on everything still pending, and
+    taken off the total fees, on top of the money taken. You can take a discount with no
+    payment at all.
+  - **This payment only:** ₹ or % of the amount being cleared; it comes out of that amount.
+- **Previous dues:** a one-time charge for what a student still owes from earlier years,
+  entered when adding an Old student (or later under Edit fees). It is cleared before all
+  other charges and can be discounted like any fee.
+- **Transport:** routes (start, end, monthly fee) are set up once by the admin under More →
+  Transport routes, per school. Choosing a route on a student's fees adds its fee to every
+  month (months and discount work as for the tuition). A month counts as paid only when the
+  tuition and the transport are both paid. The student keeps a copy of start and end.
 - **Due as of today** = net one-time charges + net monthly fee × months started so far
   (the current month counts, never more than the student's months).
 - **Pending for the year** = net fee − paid − counter discounts.
@@ -73,7 +84,18 @@ All of these live in one pure module, `src/shared/fees.ts`, with unit tests in
   the balance recalculates.
 - **A student marked Left** owes nothing further; what they paid stays in collections.
 - A student's fee cannot be lowered below what they have already settled.
-- **Late fee** is not built. It would be one more entry type in a student's `items` list.
+- **Late fee:** ₹5 for every day after the 20th of a month that that month's fee is unpaid,
+  counted up to the day it was paid, or up to today while it is still unpaid. No cap. A
+  month counts as paid on the day the money settled so far (payments + discounts, late fees
+  excluded) first covered the one-time charges and every month up to it, so it follows the
+  oldest-first rule. Months whose 20th came before the student joined carry no late fee.
+  A student who has left owes none. It is taken on the receipt next to the fees
+  (`receipts.late_fee`, part of `amount`, the money received) and shown as its own line;
+  `student_fees.paid` stays money received for fees only.
+- **Waiving a late fee** (admin and management): all of what is owed or part of it, with a
+  reason, either from the Late fee section of the student's fees page or while paying.
+  Every waiver is kept with who gave it and when (`late_fee_waivers`) and in the activity log.
+  Late fee that builds up after a waiver is owed again.
 
 ## Screens
 
@@ -93,10 +115,18 @@ All of these live in one pure module, `src/shared/fees.ts`, with unit tests in
 - **Receipt:** narrow printable layout (thermal or A5) with the amount in words (Indian
   system), Send on WhatsApp and Copy text.
 - **Reports** (on the shared Reports page): collection register, day-wise collection by mode, pending dues (due
-  today or whole year, minimum amount), fee register, class-wise and branch-wise summary,
-  discounts given, collected by staff member, cancelled receipts. Each has filters,
-  "Download for Excel" (a CSV file) and Print.
+  today or whole year, minimum amount), **class-wise pending list** (every studying student
+  of a class, paid up or not, with due today, pending for the year, late fee and phone
+  numbers), fee register, class-wise and branch-wise summary, discounts given, collected by
+  staff member, cancelled receipts. Each has filters, "Download for Excel" (a CSV file) and Print.
+  **Every report has a Period** (Today, Yesterday, This week, This month, or two dates).
+  Reports about receipts always have one (empty = start of session to today). The others look at
+  everything until a period is chosen, then add a **Collected in period** column (what each
+  student, class or school paid in it); the discounts report is limited to discounts given in
+  it, the student list to students who joined in it, class strength adds a Joined column, and the
+  leavers list to those who left in it.
 - **Fee rate chart.**
+- **Transport routes** (More → Transport routes).
 
 ## Data
 
@@ -105,7 +135,13 @@ All of these live in one pure module, `src/shared/fees.ts`, with unit tests in
   `{ type, amount, discount_type, discount_value, discount }`; totals are kept beside it
   for fast lists; `paid` and `counter_discount` are recalculated from `receipts` whenever
   a receipt is saved or cancelled.
-- `receipts`: never deleted; `cancelled_at`, `cancelled_by_name`, `cancel_reason`.
+- `receipts`: never deleted; `cancelled_at`, `cancelled_by_name`, `cancel_reason`;
+  `late_fee` is the part of `amount` that is a late fee.
+- `student_fees` also has `late_fee_paid`, `late_fee_waived` (running totals) and
+  `transport_route_id`, `transport_from`, `transport_to`. `items` now always lists nine
+  charges: `previous_dues` first, the six from the chart, `monthly`, `transport`.
+- `late_fee_waivers`: every waiver with amount, reason, who and when.
+- `transport_routes`: per school, start, end, monthly fee, open or closed.
 
 The lists, dashboard and reports work the position out in SQL (`positionSql` in
 `service.ts`) with the same rules as `feePosition()`; an API test checks they agree.
@@ -118,7 +154,9 @@ The lists, dashboard and reports work the position out in SQL (`positionSql` in
 | `GET /collect`, `POST /receipts`                                                                        | `fees.collect`    |
 | `PUT /students/:enrolmentId`, `POST /sync`                                                              | `fees.edit`       |
 | `POST /receipts/:id/cancel`                                                                             | `fees.cancel`     |
-| `PUT /rates`, `POST /rates/start`                                                                       | `fees.rates.edit` |
+| `POST /students/:enrolmentId/late-fee-waiver`                                                           | `fees.waive`      |
+| `GET /transport-routes`                                                                                 | `fees.view`       |
+| `POST /transport-routes`, `PUT /transport-routes/:id`, `PUT /rates`, `POST /rates/start`                | `fees.rates.edit` |
 
 ## Decisions made for the owner (change if wrong)
 
@@ -126,5 +164,8 @@ The lists, dashboard and reports work the position out in SQL (`positionSql` in
 - The monthly fee is charged for 12 months unless changed for a student.
 - Accountants may edit a student's fees and discounts; every change is in the activity log
   and the Discounts report. Only admin and management cancel receipts.
+- Late fee: no cap (owner's choice, 2026-11-27). With ₹5 a day, a month left unpaid since April is
+  already more than a whole month's fee, so the admin will want to waive many of them.
 - Not built: import of the v1 fees backup (`reference/school-fees-v1/` is not in the
-  repository), late fees, SMS.
+  repository), SMS. Dashboard and reports other than the pending lists do not add late fees
+  to "overdue"; a receipt's late fee is part of the cash collected.

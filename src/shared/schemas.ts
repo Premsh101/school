@@ -82,7 +82,7 @@ export const subjectInput = z.object({
   active: z.boolean().default(true),
 });
 
-export const GENDERS = ['male', 'female', 'other'] as const;
+export const GENDERS = ['male', 'female'] as const;
 
 export const studentPersonInput = z.object({
   admission_no: text(20).default(''), // empty → the server gives the next number
@@ -93,7 +93,11 @@ export const studentPersonInput = z.object({
   phone2: phone.default(''),
   address: text(200).default(''),
   dob: optionalDate,
-  gender: z.union([z.enum(GENDERS), z.literal('')]).default(''),
+  // A student saved as "Other" before it was removed is read as "not set", so they can still be edited.
+  gender: z.preprocess(
+    (v) => (v === 'other' ? '' : v),
+    z.union([z.enum(GENDERS), z.literal('')]).default(''),
+  ),
 });
 
 export const enrolmentPlaceInput = z.object({
@@ -119,6 +123,11 @@ export const enrolmentUpdateInput = enrolmentPlaceInput.extend({
 });
 
 export const enrolmentCreateInput = enrolmentPlaceInput.extend({ session_id: id });
+
+export const cancelRegistrationInput = z.object({
+  reason: text(200).min(3, 'Write why the registration is being cancelled'),
+  date: optionalDate,
+});
 
 export const staffInput = z.object({
   name: text(80).min(1, 'Enter the name'),

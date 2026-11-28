@@ -7,6 +7,7 @@ import {
   dueAtAdmission,
   feePosition,
   FEE_KEYS,
+  lateFee,
   MODE_LABELS,
   PAYMENT_MODES,
   monthsStarted,
@@ -28,18 +29,29 @@ import type {
   ReceiptDetail,
   ReceiptRow,
   StudentFeeDetail,
+  TransportRoute,
 } from '../../../shared/fees-api';
 import { formatINR } from '../../../shared/format';
+import { can } from '../../../shared/permissions';
 import type { Paged } from '../../../shared/types';
 import { audit } from '../../core/audit';
 import { assertBranch, requirePermission, scopeSql } from '../../core/auth';
 import { AppError, intParam, notFound, parse } from '../../core/errors';
 import type { AppEnv, Ctx } from '../../env';
 import { runReport } from './reports';
-import { cancelInput, ratesInput, ratesStartInput, receiptInput, studentFeesInput } from './schema';
+import {
+  cancelInput,
+  lateFeeWaiverInput,
+  ratesInput,
+  ratesStartInput,
+  receiptInput,
+  studentFeesInput,
+  transportRouteInput,
+} from './schema';
 import {
   afterEnrolments,
   ensureRates,
+  lateFeesFor,
   positionSql,
   RATE_COLUMNS,
   refreshPaid,
@@ -164,15 +176,21 @@ interface FeeRow {
   discount_reason: string;
   paid: number;
   counter_discount: number;
+  late_fee_paid: number;
+  late_fee_waived: number;
+  transport_route_id: number | null;
+  transport_from: string;
+  transport_to: string;
 }
 type RawReceipt = Omit<ReceiptRow, 'covers'>;
 
 const STUDENT_SELECT = `SELECT e.id AS enrolment_id, s.id AS student_id, s.admission_no, s.name, s.father_name, s.phone, s.phone2,
   e.branch_id, e.class_id, sec.name AS section_name, e.roll_no, e.admission_type, e.status,
+  e.cancel_reason, date(e.created_at, '+330 minutes') AS joined_on,
   e.session_id, ses.name AS session_name, ses.start_year, ses.start_month
   FROM enrolments e JOIN students s ON s.id = e.student_id JOIN sections sec ON sec.id = e.section_id
   JOIN academic_sessions ses ON ses.id = e.session_id WHERE e.id = ?`;
-const RECEIPT_COLUMNS = `id, receipt_no, date, amount, counter_discount, mode, reference, note, collected_by_name, cancelled_at, cancelled_by_name, cancel_reason`;
+const RECEIPT_COLUMNS = `id, receipt_no, date, amount, late_fee, counter_discount, mode, reference, note, collected_by_name, cancelled_at, cancelled_by_name, cancel_reason`;
 
 /** Reads a student's fees (setting them up from the rate chart on first use) and works out where they stand. */
 async function loadStudentFees(
@@ -185,7 +203,8 @@ async function loadStudentFees(
       db.prepare(STUDENT_SELECT).bind(enrolmentId),
       db
         .prepare(
-          'SELECT months, items, discount_reason, paid, counter_discount FROM student_fees WHERE enrolment_id = ?',
+          `SELECT months, items, discount_reason, paid, counter_discount, late_fee_paid, late_fee_waived,
+                  transport_route_id, transport_from, transport_to FROM student_fees WHERE enrolment_id = ?`,
         )
         .bind(enrolmentId),
       db
@@ -197,15 +216,20 @@ async function loadStudentFees(
             AND r.session_id = e.session_id AND r.branch_id = e.branch_id AND r.class_id = e.class_id AND r.admission_type = e.admission_type`,
         )
         .bind(enrolmentId),
+      db
+        .prepare(
+          'SELECT id, amount, reason, by_name, at FROM late_fee_waivers WHERE enrolment_id = ? ORDER BY id DESC',
+        )
+        .bind(enrolmentId),
     ]);
   const first = await read();
-  let [, feeRes, receiptRes, rateRes] = first;
+  let [, feeRes, receiptRes, rateRes, waiverRes] = first;
   const student = first[0]!.results[0] as FeeStudent | undefined;
   if (!student) throw notFound('Student');
   assertBranch(c.get('user'), student.branch_id);
   if (!feeRes!.results.length) {
     await db.batch(afterEnrolments(db, student.session_id));
-    [, feeRes, receiptRes, rateRes] = await read();
+    [, feeRes, receiptRes, rateRes, waiverRes] = await read();
   }
   const raw = feeRes!.results[0] as FeeRow | undefined;
   if (!raw)
@@ -214,18 +238,38 @@ async function loadStudentFees(
       'Fees could not be set up for this student. Check the rate chart for their class and try again.',
     );
 
-  const plan: FeePlan = { items: JSON.parse(raw.items) as FeeItem[], months: raw.months };
+  // Fees saved before previous dues and transport existed get those two filled in (at 0).
+  const plan: FeePlan = {
+    items: withDiscounts(JSON.parse(raw.items) as FeeItem[]),
+    months: raw.months,
+  };
   const started = monthsStarted(student, todayIST());
   const left = student.status === 'left';
   const position = feePosition(plan, raw, started, left);
   let running = 0;
-  const receipts = (receiptRes!.results as RawReceipt[]).map((r) => {
+  const raws = receiptRes!.results as RawReceipt[];
+  const receipts = raws.map((r) => {
     if (r.cancelled_at) return { ...r, covers: '' };
-    const now = r.amount + r.counter_discount;
+    // What this receipt cleared of the fees: the money for fees plus any discount (not the late fee).
+    const now = r.amount - r.late_fee + r.counter_discount;
     const covers = receiptCovers(plan, running, now, student);
     running += now;
     return { ...r, covers };
   });
+  const late = lateFee(
+    plan,
+    student,
+    raws
+      .filter((r) => !r.cancelled_at)
+      .map((r) => ({ date: r.date, settled: r.amount - r.late_fee + r.counter_discount })),
+    todayIST(),
+    {
+      paid: raw.late_fee_paid,
+      waived: raw.late_fee_waived,
+      left,
+      joinedOn: student.joined_on,
+    },
+  );
   return {
     student,
     plan,
@@ -235,6 +279,12 @@ async function loadStudentFees(
     allocation: allocate(plan, position.settled, student, started, left),
     due_at_admission: dueAtAdmission(plan),
     quick: quickAmounts(plan, position),
+    late_fee: late,
+    waivers: waiverRes!.results as StudentFeeDetail['waivers'],
+    transport:
+      raw.transport_route_id || raw.transport_from
+        ? { route_id: raw.transport_route_id, from: raw.transport_from, to: raw.transport_to }
+        : null,
     receipts: receipts.reverse(),
     raw,
   };
@@ -266,6 +316,23 @@ routes.put('/students/:id', requirePermission('fees.edit'), async (c) => {
       );
     }
   }
+  let route: { id: number; branch_id: number; source: string; destination: string } | null = null;
+  if (input.transport_route_id) {
+    route = await db
+      .prepare('SELECT id, branch_id, source, destination FROM transport_routes WHERE id = ?')
+      .bind(input.transport_route_id)
+      .first<{ id: number; branch_id: number; source: string; destination: string }>();
+    if (!route || route.branch_id !== current.student.branch_id)
+      throw new AppError(400, 'Choose a transport route of this student’s school.', {
+        transport_route_id: 'Not found',
+      });
+  } else if ((input.items.find((i) => i.type === 'transport')?.amount ?? 0) > 0) {
+    throw new AppError(
+      400,
+      'Choose the transport route for the transport fee, or set the transport fee to 0.',
+      { transport_route_id: 'Choose a route' },
+    );
+  }
   const plan: FeePlan = { items: withDiscounts(input.items), months: input.months };
   const totals = planTotals(plan);
   const hasDiscount = plan.items.some((i) => i.discount > 0);
@@ -279,7 +346,8 @@ routes.put('/students/:id', requirePermission('fees.edit'), async (c) => {
     db
       .prepare(
         `UPDATE student_fees SET months = ?, items = ?, one_time_gross = ?, one_time_net = ?, monthly_gross = ?, monthly_net = ?,
-                discount_reason = ?, updated_at = ? WHERE enrolment_id = ?`,
+                discount_reason = ?, transport_route_id = ?, transport_from = ?, transport_to = ?, updated_at = ?
+          WHERE enrolment_id = ?`,
       )
       .bind(
         input.months,
@@ -289,6 +357,9 @@ routes.put('/students/:id', requirePermission('fees.edit'), async (c) => {
         totals.monthly_gross,
         totals.monthly_net,
         hasDiscount ? input.discount_reason : '',
+        route?.id ?? null,
+        route?.source ?? '',
+        route?.destination ?? '',
         new Date().toISOString(),
         id,
       ),
@@ -346,8 +417,14 @@ routes.get('/collect', requirePermission('fees.collect'), async (c) => {
       .bind(...params, PAGE_SIZE, (page - 1) * PAGE_SIZE),
     db.prepare(`SELECT COUNT(*) AS n ${from}`).bind(...params),
   ]);
+  const found = rows!.results as Omit<CollectRow, 'late_fee'>[];
+  const late = await lateFeesFor(
+    db,
+    found.map((r) => r.enrolment_id),
+    todayIST(),
+  );
   return c.json<Paged<CollectRow>>({
-    rows: rows!.results as CollectRow[],
+    rows: found.map((r) => ({ ...r, late_fee: late.get(r.enrolment_id)?.outstanding ?? 0 })),
     page,
     page_size: PAGE_SIZE,
     total: (count!.results[0] as { n: number }).n,
@@ -372,32 +449,74 @@ routes.post('/receipts', requirePermission('fees.collect'), async (c) => {
       400,
       'This student has left the school and owes nothing further, so no fee can be collected.',
     );
-  if (input.settle_amount > position.pending) {
+  if (input.counter_discount_type === 'percent' && input.counter_discount_value > 100) {
+    throw new AppError(400, 'The discount cannot be more than 100%.', {
+      counter_discount_value: 'Too much',
+    });
+  }
+
+  // How much of the fees this receipt clears, the discount, and the money taken for fees.
+  //  - 'payment': the amount entered is what gets cleared; the discount comes out of it.
+  //  - 'total': the discount is worked out on everything still pending, and comes on top of
+  //    the money taken, so an overall discount comes off the total fees.
+  let cleared: number;
+  let discount: number;
+  let feeCash: number;
+  if (input.discount_basis === 'total') {
+    discount = computeDiscount(
+      position.pending,
+      input.counter_discount_type,
+      input.counter_discount_value,
+    );
+    if (
+      input.counter_discount_type === 'amount' &&
+      input.counter_discount_value > position.pending
+    ) {
+      throw new AppError(
+        400,
+        `The discount (${formatINR(input.counter_discount_value)}) is more than what is pending (${formatINR(position.pending)}).`,
+        { counter_discount_value: 'Too much' },
+      );
+    }
+    feeCash = input.settle_amount;
+    cleared = feeCash + discount;
+  } else {
+    cleared = input.settle_amount;
+    discount = computeDiscount(cleared, input.counter_discount_type, input.counter_discount_value);
+    if (input.counter_discount_type === 'amount' && input.counter_discount_value > cleared) {
+      throw new AppError(400, 'The discount cannot be more than the amount being cleared.', {
+        counter_discount_value: 'Too much',
+      });
+    }
+    feeCash = cleared - discount;
+  }
+  if (cleared > position.pending) {
     throw new AppError(
       400,
       `Only ${formatINR(position.pending)} is pending for this student. Enter ${formatINR(position.pending)} or less.`,
       { settle_amount: 'More than pending' },
     );
   }
-  if (input.counter_discount_type === 'percent' && input.counter_discount_value > 100) {
-    throw new AppError(400, 'The counter discount cannot be more than 100%.', {
-      counter_discount_value: 'Too much',
-    });
+
+  // The late fee: taken in full or in part, or waived (admin and management).
+  const owed = fees.late_fee.outstanding;
+  if (input.waive_late_fee && !can(user.role, 'fees.waive'))
+    throw new AppError(403, 'Only the admin or management can waive a late fee.');
+  const waived = input.waive_late_fee ? owed : 0;
+  const lateTaken = input.waive_late_fee ? 0 : input.late_fee;
+  if (lateTaken > owed) {
+    throw new AppError(
+      400,
+      owed > 0
+        ? `The late fee owed is ${formatINR(owed)}. Enter ${formatINR(owed)} or less.`
+        : 'There is no late fee owed for this student.',
+      { late_fee: 'More than owed' },
+    );
   }
-  const discount = computeDiscount(
-    input.settle_amount,
-    input.counter_discount_type,
-    input.counter_discount_value,
-  );
-  if (
-    input.counter_discount_type === 'amount' &&
-    input.counter_discount_value > input.settle_amount
-  ) {
-    throw new AppError(400, 'The counter discount cannot be more than the amount being cleared.', {
-      counter_discount_value: 'Too much',
-    });
+  const amount = feeCash + lateTaken;
+  if (cleared === 0 && lateTaken === 0) {
+    throw new AppError(400, 'Enter an amount more than 0.', { settle_amount: 'Enter an amount' });
   }
-  const amount = input.settle_amount - discount;
   if (input.mode !== 'cash' && amount > 0 && !input.reference) {
     throw new AppError(
       400,
@@ -411,9 +530,9 @@ routes.post('/receipts', requirePermission('fees.collect'), async (c) => {
       .prepare(
         // The running number and the "not more than pending" check happen inside the insert,
         // so two people saving at the same moment cannot clash or over-collect.
-        `INSERT INTO receipts (receipt_no, branch_id, seq, enrolment_id, student_id, session_id, date, amount, counter_discount,
+        `INSERT INTO receipts (receipt_no, branch_id, seq, enrolment_id, student_id, session_id, date, amount, late_fee, counter_discount,
                 counter_discount_type, counter_discount_value, mode, reference, note, collected_by, collected_by_name, created_at)
-         SELECT b.code || '-' || printf('%05d', n.seq), b.id, n.seq, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
+         SELECT b.code || '-' || printf('%05d', n.seq), b.id, n.seq, ?2, ?3, ?4, ?5, ?6, ?18, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15
            FROM branches b, (SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM receipts WHERE branch_id = ?1) n
           WHERE b.id = ?1
             AND (SELECT paid + counter_discount FROM student_fees WHERE enrolment_id = ?2) + ?16 <= ?17`,
@@ -434,10 +553,34 @@ routes.post('/receipts', requirePermission('fees.collect'), async (c) => {
         user.id,
         user.name,
         now,
-        input.settle_amount,
+        cleared,
         position.net,
+        lateTaken,
       ),
     refreshPaid(db, student.enrolment_id),
+    // A waived late fee is written down with who gave it, in the same step as the receipt
+    // (and only if that receipt was saved).
+    db
+      .prepare(
+        `INSERT INTO late_fee_waivers (enrolment_id, amount, reason, by_name, at)
+         SELECT ?1, ?2, ?3, ?4, ?5
+          WHERE ?2 > 0 AND EXISTS (SELECT 1 FROM receipts r WHERE r.enrolment_id = ?1 AND r.created_at = ?5 AND r.collected_by = ?6)`,
+      )
+      .bind(
+        student.enrolment_id,
+        waived,
+        input.note || 'Waived at the counter',
+        user.name,
+        now,
+        user.id,
+      ),
+    db
+      .prepare(
+        `UPDATE student_fees SET late_fee_waived = late_fee_waived + ?2
+          WHERE enrolment_id = ?1 AND ?2 > 0
+            AND EXISTS (SELECT 1 FROM receipts r WHERE r.enrolment_id = ?1 AND r.created_at = ?3 AND r.collected_by = ?4)`,
+      )
+      .bind(student.enrolment_id, waived, now, user.id),
     db
       .prepare(
         `INSERT INTO audit_log (at, user_id, user_name, action, entity, entity_id, branch_id, summary)
@@ -449,7 +592,7 @@ routes.post('/receipts', requirePermission('fees.collect'), async (c) => {
         now,
         user.id,
         user.name,
-        `${formatINR(amount)}${discount ? ` + ${formatINR(discount)} counter discount` : ''}`,
+        `${formatINR(amount)}${lateTaken ? ` (late fee ${formatINR(lateTaken)})` : ''}${discount ? ` + ${formatINR(discount)} discount` : ''}${waived ? `, late fee ${formatINR(waived)} waived` : ''}`,
         student.name,
         student.enrolment_id,
       ),
@@ -499,6 +642,7 @@ routes.get('/receipts/:id', requirePermission('fees.view'), async (c) => {
     },
     pending: fees.position.pending,
     overdue: fees.position.overdue,
+    late_fee: fees.late_fee.outstanding,
   });
 });
 
@@ -527,6 +671,124 @@ routes.post('/receipts/:id/cancel', requirePermission('fees.cancel'), async (c) 
   ]);
   return c.json({ ok: true });
 });
+
+/** Waives a late fee (all of what is owed, or part of it) with a reason; it stays on record. */
+routes.post('/students/:id/late-fee-waiver', requirePermission('fees.waive'), async (c) => {
+  const db = c.env.DB;
+  const user = c.get('user');
+  const id = intParam(c.req.param('id'), 'Student');
+  const input = parse(lateFeeWaiverInput, await c.req.json());
+  const fees = await loadStudentFees(c, id);
+  const owed = fees.late_fee.outstanding;
+  if (owed <= 0) throw new AppError(400, 'There is no late fee owed for this student.');
+  const amount = input.amount ?? owed;
+  if (amount > owed)
+    throw new AppError(
+      400,
+      `The late fee owed is ${formatINR(owed)}. Enter ${formatINR(owed)} or less.`,
+      {
+        amount: 'More than owed',
+      },
+    );
+  await db.batch([
+    db
+      .prepare(
+        'INSERT INTO late_fee_waivers (enrolment_id, amount, reason, by_name, at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .bind(id, amount, input.reason, user.name, new Date().toISOString()),
+    db
+      .prepare(
+        'UPDATE student_fees SET late_fee_waived = late_fee_waived + ? WHERE enrolment_id = ?',
+      )
+      .bind(amount, id),
+    audit(c, {
+      action: 'update',
+      entity: 'student_fees',
+      entity_id: id,
+      branch_id: fees.student.branch_id,
+      summary: `Waived late fee of ${formatINR(amount)} for ${fees.student.name}: ${input.reason}`,
+    }),
+  ]);
+  return c.json({ ok: true });
+});
+
+// ── Transport routes ────────────────────────────────────────────────────────
+
+routes.get('/transport-routes', requirePermission('fees.view'), async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT t.id, t.branch_id, t.source, t.destination, t.monthly_fee, t.active
+       FROM transport_routes t WHERE 1 ${scopeSql(c.get('user'), 't.branch_id')}
+      ORDER BY t.branch_id, t.source, t.destination`,
+  ).all<TransportRoute>();
+  return c.json<TransportRoute[]>(results);
+});
+
+async function saveRoute(c: Ctx, id: number | null) {
+  const db = c.env.DB;
+  const input = parse(transportRouteInput, await c.req.json());
+  assertBranch(c.get('user'), input.branch_id);
+  try {
+    if (id === null) {
+      await db.batch([
+        db
+          .prepare(
+            'INSERT INTO transport_routes (branch_id, source, destination, monthly_fee, active, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          )
+          .bind(
+            input.branch_id,
+            input.source,
+            input.destination,
+            input.monthly_fee,
+            input.active ? 1 : 0,
+            new Date().toISOString(),
+          ),
+        audit(c, {
+          action: 'create',
+          entity: 'transport_route',
+          entity_id: 'last',
+          branch_id: input.branch_id,
+          summary: `Added transport route ${input.source} to ${input.destination} (${formatINR(input.monthly_fee)} a month)`,
+        }),
+      ]);
+    } else {
+      const [res] = await db.batch([
+        db
+          .prepare(
+            'UPDATE transport_routes SET source = ?, destination = ?, monthly_fee = ?, active = ? WHERE id = ? AND branch_id = ?',
+          )
+          .bind(
+            input.source,
+            input.destination,
+            input.monthly_fee,
+            input.active ? 1 : 0,
+            id,
+            input.branch_id,
+          ),
+        audit(c, {
+          action: 'update',
+          entity: 'transport_route',
+          entity_id: id,
+          branch_id: input.branch_id,
+          summary: `Changed transport route ${input.source} to ${input.destination}: ${formatINR(input.monthly_fee)} a month. Students already on it keep their fee until it is changed on their fees.`,
+        }),
+      ]);
+      if (!res!.meta.changes) throw notFound('Transport route');
+    }
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    if (String(e).includes('UNIQUE'))
+      throw new AppError(409, 'This school already has a route with the same start and end.', {
+        destination: 'Already used',
+      });
+    throw e;
+  }
+  return c.json({ ok: true });
+}
+
+routes.post('/transport-routes', requirePermission('fees.rates.edit'), (c) => saveRoute(c, null));
+routes.put('/transport-routes/:id', requirePermission('fees.rates.edit'), (c) =>
+  saveRoute(c, intParam(c.req.param('id'), 'Transport route')),
+);
 
 // ── Dashboard ───────────────────────────────────────────────────────────────
 

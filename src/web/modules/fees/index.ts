@@ -8,6 +8,7 @@ import { ReceiptPage } from './Receipt';
 import { REPORTS } from '../../../shared/fees-api';
 import { FeeReportsRedirect } from './Dashboard';
 import { StudentFeesPage } from './StudentFees';
+import { TransportRoutesPage } from './TransportRoutes';
 
 export const feesWebModule: WebModule = {
   id: 'fees',
@@ -22,6 +23,7 @@ export const feesWebModule: WebModule = {
     // Old address of the fee reports; they now live on the Reports page.
     { path: 'reports', component: FeeReportsRedirect, permission: 'fees.view' },
     { path: 'rates', component: RateChartPage, permission: 'fees.view' },
+    { path: 'transport', component: TransportRoutesPage, permission: 'fees.view' },
   ],
   navItems: [
     { to: '/fees', label: 'Fees', icon: 'rupee', permission: 'fees.view' },
@@ -33,8 +35,22 @@ export const feesWebModule: WebModule = {
       permission: 'fees.view',
       group: 'school',
     },
+    {
+      to: '/fees/transport',
+      label: 'Transport routes',
+      icon: 'bus',
+      permission: 'fees.rates.edit',
+      group: 'school',
+    },
   ],
-  permissions: ['fees.view', 'fees.collect', 'fees.edit', 'fees.cancel', 'fees.rates.edit'],
+  permissions: [
+    'fees.view',
+    'fees.collect',
+    'fees.edit',
+    'fees.cancel',
+    'fees.rates.edit',
+    'fees.waive',
+  ],
   reports: {
     title: 'Fees',
     endpoint: '/fees/reports',

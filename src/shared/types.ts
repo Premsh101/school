@@ -122,6 +122,8 @@ export interface Enrolment {
   status: 'studying' | 'left';
   left_date: string | null;
   result: 'pass' | 'fail' | null;
+  /** Set when the registration was cancelled; the student is then also marked as left. */
+  cancel_reason: string | null;
 }
 export interface StudentDetail {
   student: Student;
