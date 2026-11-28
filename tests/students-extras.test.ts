@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { addLogin, Client, sectionId, setupSchool, signIn } from './helpers';
 
@@ -33,13 +34,28 @@ describe('gender', () => {
     expect((await add('Boy One', { gender: 'male' })).student).toBeGreaterThan(0);
     expect((await add('Girl One', { gender: 'female' })).student).toBeGreaterThan(0);
     expect((await add('No Gender')).student).toBeGreaterThan(0);
-    const res = await owner.post('/students', {
-      name: 'Other One',
-      gender: 'other',
+    // An unknown value is refused.
+    const bad = await owner.post('/students', {
+      name: 'Bad Gender',
+      gender: 'robot',
       session_id: 1,
       enrolment: { branch_id: 1, class_id: 4, section_id: await sectionId(1, 4) },
     });
-    expect(res.status).toBe(400);
+    expect(bad.status).toBe(400);
+  });
+
+  it('reads a leftover "other" as not set, so that student can still be edited', async () => {
+    const { student } = await add('Old Other', { gender: 'male' });
+    await env.DB.prepare("UPDATE students SET gender = 'other' WHERE id = ?").bind(student).run();
+    const shown = (await owner.get(`/students/${student}`)).data.student;
+    expect(shown.gender).toBe('other'); // what the old release saved
+    // The edit form sends the stored value back unchanged.
+    const res = await owner.put(`/students/${student}`, { ...shown, phone: '9876501234' });
+    expect(res.status, JSON.stringify(res.data)).toBe(200);
+    expect((await owner.get(`/students/${student}`)).data.student).toMatchObject({
+      gender: '',
+      phone: '9876501234',
+    });
   });
 
   it('is read as male or female from an import file', async () => {

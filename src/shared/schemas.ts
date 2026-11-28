@@ -93,7 +93,11 @@ export const studentPersonInput = z.object({
   phone2: phone.default(''),
   address: text(200).default(''),
   dob: optionalDate,
-  gender: z.union([z.enum(GENDERS), z.literal('')]).default(''),
+  // A student saved as "Other" before it was removed is read as "not set", so they can still be edited.
+  gender: z.preprocess(
+    (v) => (v === 'other' ? '' : v),
+    z.union([z.enum(GENDERS), z.literal('')]).default(''),
+  ),
 });
 
 export const enrolmentPlaceInput = z.object({

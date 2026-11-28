@@ -32,7 +32,7 @@ what a person cannot use.
   an admin resetting someone's password signs them out everywhere.
 - **Sessions:** named like `2026-27`, starting in April. One is current. The session picker
   in the top bar lets anyone look at another year.
-- **Gender** is Male or Female (or not set).
+- **Gender** is Male or Female (or not set). A student saved as "Other" by the first release is read as not set, so they can still be edited.
 - **Cancelling a registration** (admin and management, More → a student → Cancel registration):
   needs a reason and a date. The student's class record for that session is marked as left
   (so they owe nothing further and what they paid stays in collections) and keeps the reason,
